@@ -1,0 +1,60 @@
+[tool.poetry]
+authors = ["황재경 <fuzzydo0ori@gmail.com>"]
+description = "모구모구 백엔드 API 서비스 - FastAPI와 PostgreSQL을 사용한 현대적인 백엔드 API"
+name = "mogu-mogu-backend"
+version = "0.1.0"
+package-mode = false
+
+[tool.poetry.dependencies]
+python = "^3.13"
+
+alembic = "^1.16.2"
+asyncpg = "^0.30.0"
+bcrypt = "^4.3.0"
+fastapi = "^0.115.14"
+pydantic = { extras = ["dotenv", "email"], version = "^2.11.7" }
+pydantic-settings = "^2.10.1"
+pyjwt = "^2.10.1"
+python-multipart = "^0.0.20"
+sqlalchemy = { extras = ["asyncio"], version = "^2.0.41" }
+
+[tool.poetry.group.dev.dependencies]
+coverage = "^7.9.1"
+freezegun = "^1.5.2"
+greenlet = "^3.2.3"
+httpx = "^0.28.1"
+mypy = "^1.16.1"
+pre-commit = "^4.2.0"
+pytest = "^8.4.1"
+pytest-asyncio = "^1.0.0"
+pytest-cov = "^6.2.1"
+pytest-xdist = "^3.8.0"
+ruff = "^0.12.1"
+uvicorn = { extras = ["standard"], version = "^0.35.0" }
+
+[build-system]
+build-backend = "poetry.core.masonry.api"
+requires = ["poetry-core>=1.0.0"]
+
+[tool.pytest.ini_options]
+addopts = "-vv -n auto --cov --cov-report xml --cov-report term-missing --cov-fail-under=100"
+asyncio_default_fixture_loop_scope = "session"
+asyncio_mode = "auto"
+testpaths = ["app/tests"]
+
+[tool.coverage.run]
+concurrency = ["greenlet"]
+omit = ["app/tests/*"]
+source = ["app"]
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+
+[tool.ruff]
+target-version = "py313"
+
+[tool.ruff.lint]
+# pycodestyle, pyflakes, isort, pylint, pyupgrade
+ignore = ["E501"]
+select = ["E", "F", "I", "PL", "UP", "W"]
