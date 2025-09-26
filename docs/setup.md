@@ -4,19 +4,19 @@
 
 ## 📋 목차
 
--   [시스템 요구사항](#시스템-요구사항)
--   [Poetry 설치](#poetry-설치)
--   [프로젝트 설정](#프로젝트-설정)
--   [환경 변수 설정](#환경-변수-설정)
--   [개발 환경 실행](#개발-환경-실행)
--   [pre-commit 설정](#pre-commit-설정)
--   [문제 해결](#문제-해결)
+- [시스템 요구사항](#시스템-요구사항)
+- [Poetry 설치](#poetry-설치)
+- [프로젝트 설정](#프로젝트-설정)
+- [환경 변수 설정](#환경-변수-설정)
+- [개발 환경 실행](#개발-환경-실행)
+- [pre-commit 설정](#pre-commit-설정)
+- [문제 해결](#문제-해결)
 
 ## 시스템 요구사항
 
--   **Python**: 3.13 이상
--   **Docker**: 20.10 이상 (데이터베이스용)
--   **Git**: 2.0 이상
+- **Python**: 3.13 이상
+- **Docker**: 20.10 이상 (데이터베이스용)
+- **Git**: 2.0 이상
 
 ## Poetry 설치
 
@@ -69,7 +69,7 @@ poetry --version
 ### 1. 저장소 클론
 
 ```bash
-git clone <repository-url>
+git clone https://github.com/ai-sesac2-Nbbang/mogu-mogu-backend.git
 cd mogu-mogu/backend
 ```
 
@@ -154,13 +154,13 @@ LOG_LEVEL=INFO
 
 ### 환경 변수 설명
 
--   **DATABASE\_\_\***: PostgreSQL 데이터베이스 연결 설정
--   **SECURITY\_\_JWT_SECRET_KEY**: JWT 토큰 서명용 비밀키 (반드시 변경하세요)
--   **SECURITY\_\_JWT_ACCESS_TOKEN_EXPIRE_SECS**: 액세스 토큰 만료 시간 (초)
--   **SECURITY\_\_REFRESH_TOKEN_EXPIRE_SECS**: 리프레시 토큰 만료 시간 (초)
--   **SECURITY\_\_PASSWORD_BCRYPT_ROUNDS**: 비밀번호 해싱 라운드 수
--   **SECURITY\_\_ALLOWED_HOSTS**: 허용된 호스트 목록
--   **SECURITY\_\_BACKEND_CORS_ORIGINS**: CORS 허용 오리진 목록
+- **DATABASE\_\_\***: PostgreSQL 데이터베이스 연결 설정
+- **SECURITY\_\_JWT_SECRET_KEY**: JWT 토큰 서명용 비밀키 (반드시 변경하세요)
+- **SECURITY\_\_JWT_ACCESS_TOKEN_EXPIRE_SECS**: 액세스 토큰 만료 시간 (초)
+- **SECURITY\_\_REFRESH_TOKEN_EXPIRE_SECS**: 리프레시 토큰 만료 시간 (초)
+- **SECURITY\_\_PASSWORD_BCRYPT_ROUNDS**: 비밀번호 해싱 라운드 수
+- **SECURITY\_\_ALLOWED_HOSTS**: 허용된 호스트 목록
+- **SECURITY\_\_BACKEND_CORS_ORIGINS**: CORS 허용 오리진 목록
 
 ## 개발 환경 실행
 
@@ -194,8 +194,8 @@ poetry run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
 서버가 실행되면 다음 URL에서 API 문서를 확인할 수 있습니다:
 
--   **Swagger UI**: http://localhost:8000/
--   **ReDoc**: http://localhost:8000/redoc
+- **Swagger UI**: http://localhost:8000/
+- **ReDoc**: http://localhost:8000/redoc
 
 ## pre-commit 설정
 
@@ -211,9 +211,9 @@ poetry run pre-commit run --all-files
 
 ### pre-commit이 수행하는 작업들
 
--   **ruff**: 코드 포맷팅 및 린팅
--   **mypy**: 타입 체킹
--   **기타**: import 정렬, 코드 품질 검사
+- **ruff**: 코드 포맷팅 및 린팅
+- **mypy**: 타입 체킹
+- **기타**: import 정렬, 코드 품질 검사
 
 ## 문제 해결
 
