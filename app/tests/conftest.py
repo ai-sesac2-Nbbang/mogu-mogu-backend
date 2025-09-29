@@ -6,10 +6,7 @@ import pytest
 import pytest_asyncio
 import sqlalchemy
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy.ext.asyncio import (
-    AsyncSession,
-    async_sessionmaker,
-)
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.core import database_session
 from app.core.config import get_settings
@@ -128,3 +125,45 @@ async def fixture_default_user(
 @pytest_asyncio.fixture(name="default_user_headers", scope="function")
 async def fixture_default_user_headers(default_user: User) -> dict[str, str]:
     return {"Authorization": f"Bearer {default_user_access_token}"}
+
+
+@pytest_asyncio.fixture(name="test_user", scope="function")
+async def fixture_test_user(session: AsyncSession) -> dict[str, str]:
+    """카카오 로그인 테스트 사용자"""
+    user_data = {
+        "user_id": "test-user-id-123",
+        "email": "test@example.com",
+        "kakao_id": 123456789,
+    }
+
+    user = User(
+        user_id=user_data["user_id"],
+        email=user_data["email"],
+        kakao_id=user_data["kakao_id"],
+        provider="kakao",
+    )
+    session.add(user)
+    await session.commit()
+
+    return user_data
+
+
+@pytest_asyncio.fixture(name="test_user_kakao", scope="function")
+async def fixture_test_user_kakao(session: AsyncSession) -> dict[str, str]:
+    """카카오 로그인 테스트 사용자"""
+    user_data = {
+        "user_id": "test-kakao-user-id-456",
+        "email": "kakao@example.com",
+        "kakao_id": 987654321,
+    }
+
+    user = User(
+        user_id=user_data["user_id"],
+        email=user_data["email"],
+        kakao_id=user_data["kakao_id"],
+        provider="kakao",
+    )
+    session.add(user)
+    await session.commit()
+
+    return user_data

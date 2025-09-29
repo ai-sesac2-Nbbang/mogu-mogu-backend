@@ -8,33 +8,40 @@
 # 1. 의존성 설치
 poetry install
 
-# 2. 데이터베이스 실행
+# 2. 환경 변수 설정
+cp .env.example .env
+# .env 파일에서 카카오 로그인 설정을 수정하세요
+
+# 3. 데이터베이스 실행
 docker compose up -d
 
-# 3. 마이그레이션 실행
+# 4. 마이그레이션 실행
 poetry run alembic upgrade head
 
-# 4. 서버 실행
+# 5. 서버 실행
 poetry run uvicorn app.main:app --reload
 ```
 
-서버가 실행되면 http://localhost:8000 에서 API 문서를 확인할 수 있습니다.
+서버가 실행되면:
+
+- **API 문서**: http://localhost:8000
+- **카카오 로그인 테스트**: http://localhost:8000/login
 
 ## 📚 문서
 
--   **[설치 및 설정 가이드](docs/setup.md)** - 프로젝트 설정 및 개발 환경 구성
--   **[API 문서](docs/api.md)** - API 엔드포인트 및 사용법
--   **[개발 가이드](docs/development.md)** - 새로운 기능 추가 및 개발 방법
--   **[배포 가이드](docs/deployment.md)** - 프로덕션 배포 방법
+- **[설치 및 설정 가이드](docs/setup.md)** - 프로젝트 설정 및 개발 환경 구성
+- **[API 문서](docs/api.md)** - API 엔드포인트 및 사용법
+- **[개발 가이드](docs/development.md)** - 새로운 기능 추가 및 개발 방법
+- **[배포 가이드](docs/deployment.md)** - 프로덕션 배포 방법
 
 ## 🛠 기술 스택
 
--   **FastAPI**: 현대적이고 빠른 Python 웹 프레임워크
--   **PostgreSQL**: 강력한 오픈소스 관계형 데이터베이스
--   **SQLAlchemy 2.0**: 비동기 쿼리, 최고의 자동완성 지원
--   **Alembic**: 데이터베이스 마이그레이션 도구
--   **Poetry**: Python 의존성 관리 도구
--   **Docker**: 컨테이너화
+- **FastAPI**: 현대적이고 빠른 Python 웹 프레임워크
+- **PostgreSQL**: 강력한 오픈소스 관계형 데이터베이스
+- **SQLAlchemy 2.0**: 비동기 쿼리, 최고의 자동완성 지원
+- **Alembic**: 데이터베이스 마이그레이션 도구
+- **Poetry**: Python 의존성 관리 도구
+- **Docker**: 컨테이너화
 
 ## 📁 프로젝트 구조
 
