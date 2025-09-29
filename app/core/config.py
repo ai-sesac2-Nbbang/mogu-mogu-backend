@@ -18,7 +18,7 @@ import logging.config
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import AnyHttpUrl, BaseModel, Field, SecretStr, computed_field
+from pydantic import BaseModel, Field, SecretStr, computed_field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy.engine.url import URL
 
@@ -26,13 +26,18 @@ PROJECT_DIR = Path(__file__).parent.parent.parent
 
 
 class Security(BaseModel):
-    jwt_issuer: str = "my-app"
+    jwt_issuer: str = "mogu-mogu-app"
     jwt_secret_key: SecretStr = SecretStr("sk-change-me")
     jwt_access_token_expire_secs: int = 24 * 3600  # 1d
     refresh_token_expire_secs: int = 28 * 24 * 3600  # 28d
     password_bcrypt_rounds: int = 12
-    allowed_hosts: list[str] = ["localhost", "127.0.0.1"]
-    backend_cors_origins: list[AnyHttpUrl] = []
+    allowed_hosts: list[str] = [
+        "localhost",
+        "127.0.0.1",
+        "*.onrender.com",
+        "*.vercel.app",
+    ]
+    backend_cors_origins: list[str] = ["*"]
 
 
 class Kakao(BaseModel):

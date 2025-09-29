@@ -10,9 +10,9 @@ from app.api.api_router import api_router, auth_router
 from app.core.config import get_settings
 
 app = FastAPI(
-    title="minimal fastapi postgres template",
+    title="Mogu Mogu Backend",
     version="6.1.0",
-    description="https://github.com/rafsaf/minimal-fastapi-postgres-template",
+    description="모두의 구매, '모구모구' - 이웃과 함께하는 AI 기반 공동구매 매칭 플랫폼",
     openapi_url="/openapi.json",
     docs_url="/",
 )
@@ -27,7 +27,7 @@ if os.path.exists(static_dir):
 
 
 # 로그인 페이지
-@app.get("/login")
+@app.get("/login", response_model=None)
 async def read_login() -> HTMLResponse | dict[str, str]:
     static_file_path = os.path.join(static_dir, "index.html")
     if os.path.exists(static_file_path):
@@ -47,12 +47,18 @@ async def read_login() -> HTMLResponse | dict[str, str]:
 
 
 # 사용자 정보 페이지
-@app.get("/user")
+@app.get("/user", response_model=None)
 async def read_user() -> FileResponse | dict[str, str]:
     static_file_path = os.path.join(static_dir, "user.html")
     if os.path.exists(static_file_path):
         return FileResponse(static_file_path)
     return {"message": "User page not found"}
+
+
+# 헬스 체크
+@app.get("/health")
+async def health() -> dict[str, str]:
+    return {"message": "OK"}
 
 
 # Sets all CORS enabled origins

@@ -110,9 +110,9 @@ async def fixture_default_user(
     session: AsyncSession, default_hashed_password: str
 ) -> AsyncGenerator[User]:
     default_user = User(
-        user_id=default_user_id,
+        id=default_user_id,
         email=default_user_email,
-        hashed_password=default_hashed_password,
+        # hashed_password=default_hashed_password,
     )
     session.add(default_user)
 
@@ -131,13 +131,13 @@ async def fixture_default_user_headers(default_user: User) -> dict[str, str]:
 async def fixture_test_user(session: AsyncSession) -> dict[str, object]:
     """카카오 로그인 테스트 사용자"""
     user_data = {
-        "user_id": "test-user-id-123",
+        "id": "12345678-1234-1234-1234-123456789012",
         "email": "test@example.com",
         "kakao_id": 123456789,
     }
 
     user = User(
-        user_id=user_data["user_id"],
+        id=user_data["id"],
         email=user_data["email"],
         kakao_id=user_data["kakao_id"],
         provider="kakao",
@@ -152,13 +152,13 @@ async def fixture_test_user(session: AsyncSession) -> dict[str, object]:
 async def fixture_test_user_kakao(session: AsyncSession) -> dict[str, object]:
     """카카오 로그인 테스트 사용자"""
     user_data = {
-        "user_id": "test-kakao-user-id-456",
+        "id": "87654321-4321-4321-4321-210987654321",
         "email": "kakao@example.com",
         "kakao_id": 987654321,
     }
 
     user = User(
-        user_id=user_data["user_id"],
+        id=user_data["id"],
         email=user_data["email"],
         kakao_id=user_data["kakao_id"],
         provider="kakao",

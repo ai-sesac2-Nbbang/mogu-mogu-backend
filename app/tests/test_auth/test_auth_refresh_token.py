@@ -36,7 +36,7 @@ async def test_refresh_token_fails_with_message_when_token_is_expired(
     session: AsyncSession,
 ) -> None:
     test_refresh_token = RefreshToken(
-        user_id=default_user.user_id,
+        user_id=default_user.id,
         refresh_token="blaxx",
         exp=int(time.time()) - 1,
     )
@@ -61,7 +61,7 @@ async def test_refresh_token_fails_with_message_when_token_is_used(
     session: AsyncSession,
 ) -> None:
     test_refresh_token = RefreshToken(
-        user_id=default_user.user_id,
+        user_id=default_user.id,
         refresh_token="blaxx",
         exp=int(time.time()) + 1000,
         used=True,
@@ -87,7 +87,7 @@ async def test_refresh_token_success_response_status_code(
     session: AsyncSession,
 ) -> None:
     test_refresh_token = RefreshToken(
-        user_id=default_user.user_id,
+        user_id=default_user.id,
         refresh_token="blaxx",
         exp=int(time.time()) + 1000,
         used=False,
@@ -112,7 +112,7 @@ async def test_refresh_token_success_old_token_is_used(
     session: AsyncSession,
 ) -> None:
     test_refresh_token = RefreshToken(
-        user_id=default_user.user_id,
+        user_id=default_user.id,
         refresh_token="blaxx",
         exp=int(time.time()) + 1000,
         used=False,
@@ -141,7 +141,7 @@ async def test_refresh_token_success_jwt_has_valid_token_type(
     session: AsyncSession,
 ) -> None:
     test_refresh_token = RefreshToken(
-        user_id=default_user.user_id,
+        user_id=default_user.id,
         refresh_token="blaxx",
         exp=int(time.time()) + 1000,
         used=False,
@@ -168,7 +168,7 @@ async def test_refresh_token_success_jwt_has_valid_expire_time(
     session: AsyncSession,
 ) -> None:
     test_refresh_token = RefreshToken(
-        user_id=default_user.user_id,
+        user_id=default_user.id,
         refresh_token="blaxx",
         exp=int(time.time()) + 1000,
         used=False,
@@ -199,7 +199,7 @@ async def test_refresh_token_success_jwt_has_valid_access_token(
     session: AsyncSession,
 ) -> None:
     test_refresh_token = RefreshToken(
-        user_id=default_user.user_id,
+        user_id=default_user.id,
         refresh_token="blaxx",
         exp=int(time.time()) + 1000,
         used=False,
@@ -218,7 +218,7 @@ async def test_refresh_token_success_jwt_has_valid_access_token(
     token = response.json()
     token_payload = verify_jwt_token(token["access_token"])
 
-    assert token_payload.sub == default_user.user_id
+    assert token_payload.sub == default_user.id
     assert token_payload.iat == now
     assert token_payload.exp == token["expires_at"]
 
@@ -231,7 +231,7 @@ async def test_refresh_token_success_refresh_token_has_valid_expire_time(
     session: AsyncSession,
 ) -> None:
     test_refresh_token = RefreshToken(
-        user_id=default_user.user_id,
+        user_id=default_user.id,
         refresh_token="blaxx",
         exp=int(time.time()) + 1000,
         used=False,
@@ -261,7 +261,7 @@ async def test_refresh_token_success_new_refresh_token_is_in_db(
     session: AsyncSession,
 ) -> None:
     test_refresh_token = RefreshToken(
-        user_id=default_user.user_id,
+        user_id=default_user.id,
         refresh_token="blaxx",
         exp=int(time.time()) + 1000,
         used=False,
