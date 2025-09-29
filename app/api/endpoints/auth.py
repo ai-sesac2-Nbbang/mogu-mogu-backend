@@ -13,11 +13,7 @@ from app.api import api_messages, deps
 from app.core.config import get_settings
 from app.core.security.jwt import create_jwt_token
 from app.core.security.kakao import exchange_code_for_token, get_kakao_user_info
-from app.core.security.password import (
-    DUMMY_PASSWORD,
-    get_password_hash,
-    verify_password,
-)
+from app.core.security.password import DUMMY_PASSWORD, verify_password
 from app.models import RefreshToken, User
 from app.schemas.requests import RefreshTokenRequest, UserCreateRequest
 from app.schemas.responses import AccessTokenResponse, KakaoUserResponse, UserResponse

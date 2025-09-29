@@ -18,7 +18,7 @@ import logging.config
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import AnyHttpUrl, BaseModel, Field, SecretStr, computed_field
+from pydantic import BaseModel, Field, SecretStr, computed_field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy.engine.url import URL
 

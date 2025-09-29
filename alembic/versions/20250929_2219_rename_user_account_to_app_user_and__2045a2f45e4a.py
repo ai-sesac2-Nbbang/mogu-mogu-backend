@@ -6,8 +6,6 @@ Create Date: 2025-09-29 22:19:29.997051
 
 """
 
-import sqlalchemy as sa
-
 from alembic import op
 
 # revision identifiers, used by Alembic.
@@ -17,7 +15,7 @@ branch_labels = None
 depends_on = None
 
 
-def upgrade():
+def upgrade() -> None:
     # 테이블명 변경: user_account -> app_user
     op.rename_table("user_account", "app_user")
 
@@ -38,7 +36,7 @@ def upgrade():
     )
 
 
-def downgrade():
+def downgrade() -> None:
     # 외래키 제거
     op.drop_constraint(
         "refresh_token_user_id_fkey", "refresh_token", type_="foreignkey"
