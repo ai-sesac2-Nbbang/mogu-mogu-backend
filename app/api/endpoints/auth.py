@@ -85,10 +85,10 @@ async def login_access_token(
 
     # 카카오 로그인만 사용하므로 비밀번호 검증 제거
 
-    jwt_token = create_jwt_token(user_id=user.user_id)
+    jwt_token = create_jwt_token(user_id=user.id)
 
     refresh_token = RefreshToken(
-        user_id=user.user_id,
+        user_id=user.id,
         refresh_token=secrets.token_urlsafe(32),
         exp=int(time.time() + get_settings().security.refresh_token_expire_secs),
     )
@@ -175,7 +175,7 @@ async def register_new_user(
 
     user = User(
         email=new_user.email,
-        hashed_password=get_password_hash(new_user.password),
+        # hashed_password=get_password_hash(new_user.password),
     )
     session.add(user)
 
@@ -255,11 +255,11 @@ async def kakao_login_callback(
             await session.commit()
 
         # 4. JWT 토큰 생성
-        jwt_token = create_jwt_token(user_id=user.user_id)
+        jwt_token = create_jwt_token(user_id=user.id)
 
         # 5. 리프레시 토큰 생성
         refresh_token = RefreshToken(
-            user_id=user.user_id,
+            user_id=user.id,
             refresh_token=secrets.token_urlsafe(32),
             exp=int(time.time() + get_settings().security.refresh_token_expire_secs),
         )

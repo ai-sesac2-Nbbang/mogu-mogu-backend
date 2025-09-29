@@ -33,7 +33,5 @@ async def test_delete_current_user_is_deleted_in_db(
         headers=default_user_headers,
     )
 
-    user = await session.scalar(
-        select(User).where(User.user_id == default_user.user_id)
-    )
+    user = await session.scalar(select(User).where(User.id == default_user.id))
     assert user is None

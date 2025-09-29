@@ -18,7 +18,7 @@ async def read_current_user(
     current_user: User = Depends(deps.get_current_user),
 ) -> UserResponse:
     return UserResponse(
-        user_id=current_user.user_id,
+        user_id=current_user.id,
         email=current_user.email,
         provider=current_user.provider,
         kakao_id=current_user.kakao_id,
@@ -35,7 +35,7 @@ async def delete_current_user(
     current_user: User = Depends(deps.get_current_user),
     session: AsyncSession = Depends(deps.get_session),
 ) -> None:
-    await session.execute(delete(User).where(User.user_id == current_user.user_id))
+    await session.execute(delete(User).where(User.id == current_user.id))
     await session.commit()
 
 

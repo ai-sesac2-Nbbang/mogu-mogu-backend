@@ -35,7 +35,7 @@ async def test_api_routes_raise_401_on_jwt_expired_token(
     api_route: routing.APIRoute,
 ) -> None:
     with freeze_time("2023-01-01"):
-        jwt = create_jwt_token(default_user.user_id)
+        jwt = create_jwt_token(default_user.id)
     with freeze_time("2023-02-01"):
         for method in api_route.methods:
             response = await client.request(
@@ -56,7 +56,7 @@ async def test_api_routes_raise_401_on_jwt_user_deleted(
     api_route: routing.APIRoute,
     session: AsyncSession,
 ) -> None:
-    await session.execute(delete(User).where(User.user_id == default_user.user_id))
+    await session.execute(delete(User).where(User.id == default_user.id))
     await session.commit()
 
     for method in api_route.methods:

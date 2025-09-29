@@ -25,7 +25,7 @@ async def get_current_user(
 ) -> User:
     token_payload = verify_jwt_token(token)
 
-    user = await session.scalar(select(User).where(User.user_id == token_payload.sub))
+    user = await session.scalar(select(User).where(User.id == token_payload.sub))
 
     if user is None:
         raise HTTPException(

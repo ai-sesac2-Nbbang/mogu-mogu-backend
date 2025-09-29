@@ -16,15 +16,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import (
-    BigInteger,
-    Boolean,
-    DateTime,
-    ForeignKey,
-    String,
-    Uuid,
-    func,
-)
+from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, String, Uuid, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -35,10 +27,10 @@ class Base(DeclarativeBase):
 
 
 class User(Base):
-    __tablename__ = "user_account"
+    __tablename__ = "app_user"
 
-    user_id: Mapped[str] = mapped_column(
-        Uuid(as_uuid=False), primary_key=True, default=lambda _: str(uuid.uuid4())
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda _: str(uuid.uuid4())
     )
     email: Mapped[str] = mapped_column(
         String(256), nullable=False, unique=True, index=True
@@ -65,6 +57,6 @@ class RefreshToken(Base):
     used: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     exp: Mapped[int] = mapped_column(BigInteger, nullable=False)
     user_id: Mapped[str] = mapped_column(
-        ForeignKey("user_account.user_id", ondelete="CASCADE"),
+        ForeignKey("app_user.id", ondelete="CASCADE"),
     )
     user: Mapped["User"] = relationship(back_populates="refresh_tokens")
