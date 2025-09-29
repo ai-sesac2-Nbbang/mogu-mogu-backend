@@ -128,7 +128,7 @@ async def fixture_default_user_headers(default_user: User) -> dict[str, str]:
 
 
 @pytest_asyncio.fixture(name="test_user", scope="function")
-async def fixture_test_user(session: AsyncSession) -> dict[str, str]:
+async def fixture_test_user(session: AsyncSession) -> dict[str, object]:
     """카카오 로그인 테스트 사용자"""
     user_data = {
         "user_id": "test-user-id-123",
@@ -149,7 +149,7 @@ async def fixture_test_user(session: AsyncSession) -> dict[str, str]:
 
 
 @pytest_asyncio.fixture(name="test_user_kakao", scope="function")
-async def fixture_test_user_kakao(session: AsyncSession) -> dict[str, str]:
+async def fixture_test_user_kakao(session: AsyncSession) -> dict[str, object]:
     """카카오 로그인 테스트 사용자"""
     user_data = {
         "user_id": "test-kakao-user-id-456",

@@ -3,7 +3,7 @@ import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.api.api_router import api_router, auth_router
@@ -28,11 +28,11 @@ if os.path.exists(static_dir):
 
 # 로그인 페이지
 @app.get("/login")
-async def read_login():
+async def read_login() -> HTMLResponse | dict[str, str]:
     static_file_path = os.path.join(static_dir, "index.html")
     if os.path.exists(static_file_path):
         # HTML 파일을 읽어서 환경 변수 주입
-        with open(static_file_path, "r", encoding="utf-8") as f:
+        with open(static_file_path, encoding="utf-8") as f:
             html_content = f.read()
 
         # 카카오 설정 주입
@@ -42,15 +42,13 @@ async def read_login():
         html_content = html_content.replace("{{REST_API_KEY}}", rest_api_key)
         html_content = html_content.replace("{{REDIRECT_URI}}", redirect_uri)
 
-        from fastapi.responses import HTMLResponse
-
         return HTMLResponse(content=html_content)
     return {"message": "Static files not found"}
 
 
 # 사용자 정보 페이지
 @app.get("/user")
-async def read_user():
+async def read_user() -> FileResponse | dict[str, str]:
     static_file_path = os.path.join(static_dir, "user.html")
     if os.path.exists(static_file_path):
         return FileResponse(static_file_path)

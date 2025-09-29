@@ -56,7 +56,7 @@ async def exchange_code_for_token(authorization_code: str) -> KakaoTokenResponse
             )
 
         except httpx.HTTPStatusError as e:
-            if e.response.status_code == 400:
+            if e.response.status_code == status.HTTP_400_BAD_REQUEST:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="Invalid authorization code or expired code",
@@ -100,7 +100,7 @@ async def get_kakao_user_info(access_token: str) -> KakaoUserInfo:
             )
 
         except httpx.HTTPStatusError as e:
-            if e.response.status_code == 401:
+            if e.response.status_code == status.HTTP_401_UNAUTHORIZED:
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
                     detail="Invalid or expired access token",

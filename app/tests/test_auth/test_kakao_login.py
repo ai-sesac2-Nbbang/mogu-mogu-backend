@@ -1,6 +1,7 @@
-from unittest.mock import AsyncMock, patch
+from unittest.mock import patch
 
 import pytest
+from fastapi import HTTPException, status
 from httpx import AsyncClient
 
 from app.core.security.kakao import KakaoTokenResponse, KakaoUserInfo
@@ -32,19 +33,21 @@ async def test_kakao_login_callback_success(client: AsyncClient) -> None:
         },
     )
 
-    with patch(
-        "app.core.security.kakao.exchange_code_for_token",
-        return_value=mock_token_response,
-    ), patch(
-        "app.core.security.kakao.get_kakao_user_info", return_value=mock_user_info
+    with (
+        patch(
+            "app.core.security.kakao.exchange_code_for_token",
+            return_value=mock_token_response,
+        ),
+        patch(
+            "app.core.security.kakao.get_kakao_user_info", return_value=mock_user_info
+        ),
     ):
-
         response = await client.post(
             "/auth/kakao/callback",
             json={"code": "mock_authorization_code", "state": "mock_state"},
         )
 
-    assert response.status_code == 200
+    assert response.status_code == status.HTTP_200_OK
     data = response.json()
     assert "access_token" in data
     assert "refresh_token" in data
@@ -55,18 +58,15 @@ async def test_kakao_login_callback_success(client: AsyncClient) -> None:
 @pytest.mark.asyncio
 async def test_kakao_login_callback_invalid_code(client: AsyncClient) -> None:
     """잘못된 인증 코드로 카카오 로그인 실패 테스트"""
-    from fastapi import HTTPException
-
     with patch(
         "app.core.security.kakao.exchange_code_for_token",
         side_effect=HTTPException(status_code=400, detail="Invalid authorization code"),
     ):
-
         response = await client.post(
             "/auth/kakao/callback", json={"code": "invalid_code", "state": "mock_state"}
         )
 
-    assert response.status_code == 400
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
 
 
 @pytest.mark.asyncio
@@ -90,25 +90,27 @@ async def test_kakao_login_callback_no_email(client: AsyncClient) -> None:
         },
     )
 
-    with patch(
-        "app.core.security.kakao.exchange_code_for_token",
-        return_value=mock_token_response,
-    ), patch(
-        "app.core.security.kakao.get_kakao_user_info", return_value=mock_user_info
+    with (
+        patch(
+            "app.core.security.kakao.exchange_code_for_token",
+            return_value=mock_token_response,
+        ),
+        patch(
+            "app.core.security.kakao.get_kakao_user_info", return_value=mock_user_info
+        ),
     ):
-
         response = await client.post(
             "/auth/kakao/callback",
             json={"code": "mock_authorization_code", "state": "mock_state"},
         )
 
-    assert response.status_code == 400
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
     assert "이메일 정보를 가져올 수 없습니다" in response.json()["detail"]
 
 
 @pytest.mark.asyncio
 async def test_get_kakao_user_info_success(
-    client: AsyncClient, test_user_kakao: dict
+    client: AsyncClient, test_user_kakao: dict[str, str]
 ) -> None:
     """카카오 사용자 정보 조회 성공 테스트"""
     # 카카오 로그인한 사용자로 인증
@@ -125,7 +127,7 @@ async def test_get_kakao_user_info_success(
         "/auth/kakao/user", headers={"Authorization": f"Bearer {access_token}"}
     )
 
-    assert response.status_code == 200
+    assert response.status_code == status.HTTP_200_OK
     data = response.json()
     assert "kakao_id" in data
     assert "email" in data
@@ -134,7 +136,7 @@ async def test_get_kakao_user_info_success(
 
 @pytest.mark.asyncio
 async def test_get_kakao_user_info_not_kakao_user(
-    client: AsyncClient, test_user: dict
+    client: AsyncClient, test_user: dict[str, str]
 ) -> None:
     """카카오가 아닌 사용자가 카카오 정보 조회 시 실패 테스트"""
     # 일반 이메일 로그인한 사용자로 인증
@@ -148,5 +150,5 @@ async def test_get_kakao_user_info_not_kakao_user(
         "/auth/kakao/user", headers={"Authorization": f"Bearer {access_token}"}
     )
 
-    assert response.status_code == 400
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
     assert "카카오로 로그인한 사용자가 아닙니다" in response.json()["detail"]

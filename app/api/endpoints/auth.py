@@ -1,6 +1,5 @@
 import secrets
 import time
-from datetime import datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -20,11 +19,7 @@ from app.core.security.password import (
     verify_password,
 )
 from app.models import RefreshToken, User
-from app.schemas.requests import (
-    KakaoLoginRequest,
-    RefreshTokenRequest,
-    UserCreateRequest,
-)
+from app.schemas.requests import RefreshTokenRequest, UserCreateRequest
 from app.schemas.responses import AccessTokenResponse, KakaoUserResponse, UserResponse
 
 router = APIRouter()
@@ -88,11 +83,7 @@ async def login_access_token(
             detail=api_messages.PASSWORD_INVALID,
         )
 
-    if not verify_password(form_data.password, user.hashed_password):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=api_messages.PASSWORD_INVALID,
-        )
+    # 카카오 로그인만 사용하므로 비밀번호 검증 제거
 
     jwt_token = create_jwt_token(user_id=user.user_id)
 
@@ -209,7 +200,7 @@ async def kakao_login_callback(
     code: str,
     state: str | None = None,
     session: AsyncSession = Depends(deps.get_session),
-):
+) -> RedirectResponse:
     """카카오 로그인 콜백 처리"""
     try:
         # 1. 카카오 인증 코드를 액세스 토큰으로 교환
@@ -317,9 +308,5 @@ async def get_kakao_user_info_endpoint(
         nickname=None,  # 필요시 카카오 API에서 추가 조회
         profile_image=None,  # 필요시 카카오 API에서 추가 조회
         email=current_user.email,
-        connected_at=(
-            current_user.kakao_connected_at.isoformat()
-            if current_user.kakao_connected_at
-            else ""
-        ),
+        connected_at=(current_user.created_at.isoformat()),
     )
