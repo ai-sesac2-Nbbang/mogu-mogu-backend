@@ -35,6 +35,14 @@ class Security(BaseModel):
     backend_cors_origins: list[AnyHttpUrl] = []
 
 
+class Kakao(BaseModel):
+    rest_api_key: SecretStr = SecretStr("your-rest-api-key")
+    client_secret: SecretStr = SecretStr("your-client-secret")
+    redirect_uri: str = "http://localhost:8000/auth/kakao/callback"
+    token_url: str = "https://kauth.kakao.com/oauth/token"
+    user_info_url: str = "https://kapi.kakao.com/v2/user/me"
+
+
 class Database(BaseModel):
     hostname: str = "postgres"
     username: str = "postgres"
@@ -46,6 +54,7 @@ class Database(BaseModel):
 class Settings(BaseSettings):
     security: Security = Field(default_factory=Security)
     database: Database = Field(default_factory=Database)
+    kakao: Kakao = Field(default_factory=Kakao)
     log_level: str = "INFO"
 
     @computed_field  # type: ignore[prop-decorator]
