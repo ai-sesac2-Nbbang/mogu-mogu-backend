@@ -1,8 +1,10 @@
 import secrets
 import time
+from datetime import datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import RedirectResponse
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -11,14 +13,19 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api import api_messages, deps
 from app.core.config import get_settings
 from app.core.security.jwt import create_jwt_token
+from app.core.security.kakao import exchange_code_for_token, get_kakao_user_info
 from app.core.security.password import (
     DUMMY_PASSWORD,
     get_password_hash,
     verify_password,
 )
 from app.models import RefreshToken, User
-from app.schemas.requests import RefreshTokenRequest, UserCreateRequest
-from app.schemas.responses import AccessTokenResponse, UserResponse
+from app.schemas.requests import (
+    KakaoLoginRequest,
+    RefreshTokenRequest,
+    UserCreateRequest,
+)
+from app.schemas.responses import AccessTokenResponse, KakaoUserResponse, UserResponse
 
 router = APIRouter()
 
@@ -192,3 +199,127 @@ async def register_new_user(
         )
 
     return user
+
+
+@router.get(
+    "/kakao/callback",
+    description="카카오 로그인 콜백 - 인증 코드를 JWT 토큰으로 교환",
+)
+async def kakao_login_callback(
+    code: str,
+    state: str | None = None,
+    session: AsyncSession = Depends(deps.get_session),
+):
+    """카카오 로그인 콜백 처리"""
+    try:
+        # 1. 카카오 인증 코드를 액세스 토큰으로 교환
+        kakao_token = await exchange_code_for_token(code)
+
+        # 2. 카카오 사용자 정보 조회
+        kakao_user_info = await get_kakao_user_info(kakao_token.access_token)
+
+        # 3. 기존 사용자 확인 또는 새 사용자 생성
+        user = await session.scalar(
+            select(User).where(User.kakao_id == kakao_user_info.id)
+        )
+
+        if user is None:
+            # 새 사용자 생성
+            # 카카오 계정에서 이메일 정보 추출
+            kakao_account = kakao_user_info.kakao_account
+            email = None
+            if kakao_account.get("email"):
+                email = kakao_account["email"]
+            elif kakao_account.get("email_verified"):
+                email = kakao_account.get("email")
+
+            if not email:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="카카오 계정에서 이메일 정보를 가져올 수 없습니다.",
+                )
+
+            # 이메일로 기존 사용자 확인
+            existing_user = await session.scalar(
+                select(User).where(User.email == email)
+            )
+
+            if existing_user:
+                # 기존 사용자에 카카오 정보 연결
+                existing_user.kakao_id = kakao_user_info.id
+                existing_user.provider = "kakao"
+                user = existing_user
+            else:
+                # 새 사용자 생성
+                user = User(
+                    email=email,
+                    kakao_id=kakao_user_info.id,
+                    provider="kakao",
+                )
+                session.add(user)
+                await session.commit()
+        else:
+            # 기존 카카오 사용자
+            session.add(user)
+            await session.commit()
+
+        # 4. JWT 토큰 생성
+        jwt_token = create_jwt_token(user_id=user.user_id)
+
+        # 5. 리프레시 토큰 생성
+        refresh_token = RefreshToken(
+            user_id=user.user_id,
+            refresh_token=secrets.token_urlsafe(32),
+            exp=int(time.time() + get_settings().security.refresh_token_expire_secs),
+        )
+        session.add(refresh_token)
+        await session.commit()
+
+        # 6. 사용자 정보 페이지로 리다이렉트 (토큰을 URL 파라미터로 전달)
+        return RedirectResponse(
+            url=f"/user?token={jwt_token.access_token}",
+            status_code=status.HTTP_302_FOUND,
+        )
+
+    except HTTPException as e:
+        # 에러 발생 시 로그인 페이지로 리다이렉트 (에러 메시지 포함)
+        error_message = e.detail.replace(" ", "%20")
+        return RedirectResponse(
+            url=f"/login?error={error_message}", status_code=status.HTTP_302_FOUND
+        )
+    except Exception as e:
+        # 예상치 못한 에러 발생 시 로그인 페이지로 리다이렉트
+        error_message = f"카카오 로그인 처리 중 오류가 발생했습니다: {str(e)}".replace(
+            " ", "%20"
+        )
+        return RedirectResponse(
+            url=f"/login?error={error_message}", status_code=status.HTTP_302_FOUND
+        )
+
+
+@router.get(
+    "/kakao/user",
+    response_model=KakaoUserResponse,
+    description="현재 로그인한 사용자의 카카오 정보 조회",
+)
+async def get_kakao_user_info_endpoint(
+    current_user: User = Depends(deps.get_current_user),
+) -> KakaoUserResponse:
+    """현재 로그인한 사용자의 카카오 정보 조회"""
+    if current_user.provider != "kakao" or not current_user.kakao_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="카카오로 로그인한 사용자가 아닙니다.",
+        )
+
+    return KakaoUserResponse(
+        kakao_id=current_user.kakao_id,
+        nickname=None,  # 필요시 카카오 API에서 추가 조회
+        profile_image=None,  # 필요시 카카오 API에서 추가 조회
+        email=current_user.email,
+        connected_at=(
+            current_user.kakao_connected_at.isoformat()
+            if current_user.kakao_connected_at
+            else ""
+        ),
+    )
