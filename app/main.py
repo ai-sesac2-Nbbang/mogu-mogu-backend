@@ -10,9 +10,9 @@ from app.api.api_router import api_router, auth_router
 from app.core.config import get_settings
 
 app = FastAPI(
-    title="minimal fastapi postgres template",
+    title="Mogu Mogu Backend",
     version="6.1.0",
-    description="https://github.com/rafsaf/minimal-fastapi-postgres-template",
+    description="모두의 구매, '모구모구' - 이웃과 함께하는 AI 기반 공동구매 매칭 플랫폼",
     openapi_url="/openapi.json",
     docs_url="/",
 )
