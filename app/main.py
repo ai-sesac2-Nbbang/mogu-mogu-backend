@@ -55,6 +55,12 @@ async def read_user() -> FileResponse | dict[str, str]:
     return {"message": "User page not found"}
 
 
+# 헬스 체크
+@app.get("/health")
+async def health() -> dict[str, str]:
+    return {"message": "OK"}
+
+
 # Sets all CORS enabled origins
 app.add_middleware(
     CORSMiddleware,
