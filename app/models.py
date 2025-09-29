@@ -16,16 +16,21 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, String, Uuid, func
+from sqlalchemy import (
+    BigInteger,
+    Boolean,
+    DateTime,
+    ForeignKey,
+    String,
+    Uuid,
+    func,
+)
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
 class Base(DeclarativeBase):
-    create_time: Mapped[datetime] = mapped_column(
+    created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
-    )
-    update_time: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
 
 
@@ -38,7 +43,15 @@ class User(Base):
     email: Mapped[str] = mapped_column(
         String(256), nullable=False, unique=True, index=True
     )
-    hashed_password: Mapped[str] = mapped_column(String(128), nullable=False)
+
+    # 카카오 로그인 관련 필드
+    kakao_id: Mapped[int | None] = mapped_column(
+        BigInteger, nullable=True, unique=True, index=True
+    )
+    provider: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="kakao"
+    )  # kakao만 사용
+
     refresh_tokens: Mapped[list["RefreshToken"]] = relationship(back_populates="user")
 
 

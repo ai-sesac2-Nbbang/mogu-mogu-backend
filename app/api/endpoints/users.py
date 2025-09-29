@@ -3,9 +3,11 @@ from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api import deps
-from app.core.security.password import get_password_hash
+
+# 카카오 로그인만 사용하므로 비밀번호 관련 import 제거
 from app.models import User
-from app.schemas.requests import UserUpdatePasswordRequest
+
+# 카카오 로그인만 사용하므로 비밀번호 관련 스키마 제거
 from app.schemas.responses import UserResponse
 
 router = APIRouter()
@@ -14,8 +16,14 @@ router = APIRouter()
 @router.get("/me", response_model=UserResponse, description="Get current user")
 async def read_current_user(
     current_user: User = Depends(deps.get_current_user),
-) -> User:
-    return current_user
+) -> UserResponse:
+    return UserResponse(
+        user_id=current_user.user_id,
+        email=current_user.email,
+        provider=current_user.provider,
+        kakao_id=current_user.kakao_id,
+        kakao_connected_at=current_user.created_at.isoformat(),
+    )
 
 
 @router.delete(
@@ -31,16 +39,4 @@ async def delete_current_user(
     await session.commit()
 
 
-@router.post(
-    "/reset-password",
-    status_code=status.HTTP_204_NO_CONTENT,
-    description="Update current user password",
-)
-async def reset_current_user_password(
-    user_update_password: UserUpdatePasswordRequest,
-    session: AsyncSession = Depends(deps.get_session),
-    current_user: User = Depends(deps.get_current_user),
-) -> None:
-    current_user.hashed_password = get_password_hash(user_update_password.password)
-    session.add(current_user)
-    await session.commit()
+# 카카오 로그인만 사용하므로 비밀번호 관련 기능 제거
