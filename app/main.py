@@ -27,8 +27,8 @@ if os.path.exists(static_dir):
 
 
 # 로그인 페이지
-@app.get("/login")
-async def read_login() -> HTMLResponse | dict[str, str]:
+@app.get("/login", response_model=None)
+async def read_login():
     static_file_path = os.path.join(static_dir, "index.html")
     if os.path.exists(static_file_path):
         # HTML 파일을 읽어서 환경 변수 주입
@@ -47,8 +47,8 @@ async def read_login() -> HTMLResponse | dict[str, str]:
 
 
 # 사용자 정보 페이지
-@app.get("/user")
-async def read_user() -> FileResponse | dict[str, str]:
+@app.get("/user", response_model=None)
+async def read_user():
     static_file_path = os.path.join(static_dir, "user.html")
     if os.path.exists(static_file_path):
         return FileResponse(static_file_path)
