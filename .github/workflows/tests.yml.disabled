@@ -53,5 +53,8 @@ jobs:
           SECURITY__JWT_SECRET_KEY: very-not-secret
           DATABASE__HOSTNAME: localhost
           DATABASE__PASSWORD: postgres
+          KAKAO__REST_API_KEY: test-rest-api-key
+          KAKAO__CLIENT_SECRET: test-client-secret
+          KAKAO__REDIRECT_URI: http://localhost:8000/auth/kakao/callback
         run: |
-          poetry run pytest
+          poetry run pytest --cov-fail-under=70
