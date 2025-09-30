@@ -2,7 +2,7 @@ from collections.abc import AsyncGenerator
 from typing import Annotated
 
 from fastapi import Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer
+from fastapi.security import HTTPBearer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -11,7 +11,8 @@ from app.core import database_session
 from app.core.security.jwt import verify_jwt_token
 from app.models import User
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/access-token")
+# JWT Bearer 토큰 인증을 위한 스키마
+bearer_scheme = HTTPBearer()
 
 
 async def get_session() -> AsyncGenerator[AsyncSession]:
@@ -20,10 +21,11 @@ async def get_session() -> AsyncGenerator[AsyncSession]:
 
 
 async def get_current_user(
-    token: Annotated[str, Depends(oauth2_scheme)],
+    token: Annotated[str, Depends(bearer_scheme)],
     session: AsyncSession = Depends(get_session),
 ) -> User:
-    token_payload = verify_jwt_token(token)
+    # token은 HTTPBearer 객체이므로 .credentials로 실제 토큰 값에 접근
+    token_payload = verify_jwt_token(token.credentials)
 
     user = await session.scalar(select(User).where(User.id == token_payload.sub))
 
