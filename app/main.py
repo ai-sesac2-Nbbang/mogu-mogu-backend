@@ -1,10 +1,6 @@
-import os
-
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
-from fastapi.responses import FileResponse, HTMLResponse
-from fastapi.staticfiles import StaticFiles
 
 from app.api.api_router import api_router, auth_router
 from app.core.config import get_settings
@@ -19,40 +15,6 @@ app = FastAPI(
 
 app.include_router(auth_router)
 app.include_router(api_router)
-
-# 정적 파일 서빙 설정
-static_dir = os.path.join(os.path.dirname(__file__), "..", "static")
-if os.path.exists(static_dir):
-    app.mount("/static", StaticFiles(directory=static_dir), name="static")
-
-
-# 로그인 페이지
-@app.get("/login", response_model=None)
-async def read_login() -> HTMLResponse | dict[str, str]:
-    static_file_path = os.path.join(static_dir, "index.html")
-    if os.path.exists(static_file_path):
-        # HTML 파일을 읽어서 환경 변수 주입
-        with open(static_file_path, encoding="utf-8") as f:
-            html_content = f.read()
-
-        # 카카오 설정 주입
-        settings = get_settings()
-        rest_api_key = settings.kakao.rest_api_key.get_secret_value()
-        redirect_uri = settings.kakao.redirect_uri
-        html_content = html_content.replace("{{REST_API_KEY}}", rest_api_key)
-        html_content = html_content.replace("{{REDIRECT_URI}}", redirect_uri)
-
-        return HTMLResponse(content=html_content)
-    return {"message": "Static files not found"}
-
-
-# 사용자 정보 페이지
-@app.get("/user", response_model=None)
-async def read_user() -> FileResponse | dict[str, str]:
-    static_file_path = os.path.join(static_dir, "user.html")
-    if os.path.exists(static_file_path):
-        return FileResponse(static_file_path)
-    return {"message": "User page not found"}
 
 
 # 헬스 체크

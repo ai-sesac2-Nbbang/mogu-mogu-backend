@@ -38,6 +38,7 @@ class Security(BaseModel):
         "*.vercel.app",
     ]
     backend_cors_origins: list[str] = ["*"]
+    app_deep_link: str = "mogumogu://auth/kakao"
 
 
 class Kakao(BaseModel):

@@ -1,4 +1,5 @@
 from typing import Any
+from urllib.parse import urlencode
 
 import httpx
 from fastapi import HTTPException, status
@@ -114,3 +115,16 @@ async def get_kakao_user_info(access_token: str) -> KakaoUserInfo:
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Failed to connect to Kakao API",
             )
+
+
+def get_kakao_login_url() -> str:
+    """카카오 로그인 URL을 생성합니다."""
+    settings = get_settings()
+
+    params = {
+        "client_id": settings.kakao.rest_api_key.get_secret_value(),
+        "redirect_uri": settings.kakao.redirect_uri,
+        "response_type": "code",
+    }
+
+    return f"https://kauth.kakao.com/oauth/authorize?{urlencode(params)}"
