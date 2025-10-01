@@ -36,6 +36,10 @@ class User(Base):
         String(256), nullable=False, unique=True, index=True
     )
 
+    # 사용자 프로필 정보
+    nickname: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    profile_image_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
+
     # 카카오 로그인 관련 필드
     kakao_id: Mapped[int | None] = mapped_column(
         BigInteger, nullable=True, unique=True, index=True

@@ -97,27 +97,19 @@ async def kakao_callback(
                 error_url = f"{settings.security.app_deep_link}?ok=false&message={'카카오 계정에서 이메일 정보를 가져올 수 없습니다.'}"
                 return RedirectResponse(url=error_url)
 
-            # 이메일로 기존 사용자 확인
-            existing_user = await session.scalar(
-                select(User).where(User.email == email)
-            )
+            # 카카오 프로필 정보 추출
+            profile = kakao_account.get("profile", {})
+            nickname = profile.get("nickname")
+            profile_image_url = profile.get("profile_image_url")
 
-            if existing_user:
-                # 기존 사용자에 카카오 정보 연결
-                existing_user.kakao_id = kakao_user_info.id
-                existing_user.provider = "kakao"
-                user = existing_user
-            else:
-                # 새 사용자 생성
-                user = User(
-                    email=email,
-                    kakao_id=kakao_user_info.id,
-                    provider="kakao",
-                )
-                session.add(user)
-                await session.commit()
-        else:
-            # 기존 카카오 사용자
+            # 새 사용자 생성
+            user = User(
+                email=email,
+                kakao_id=kakao_user_info.id,
+                provider="kakao",
+                nickname=nickname,
+                profile_image_url=profile_image_url,
+            )
             session.add(user)
             await session.commit()
 
