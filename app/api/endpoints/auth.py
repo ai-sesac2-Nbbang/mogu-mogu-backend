@@ -110,7 +110,7 @@ async def kakao_callback(
                 provider="kakao",
                 nickname=nickname,
                 profile_image_url=profile_image_url,
-                status=UserStatusEnum.PENDING_ONBOARDING,
+                status=UserStatusEnum.PENDING_ONBOARDING.value,
             )
             session.add(user)
             await session.commit()
@@ -131,7 +131,7 @@ async def kakao_callback(
         settings = get_settings()
 
         # 온보딩이 필요한 경우
-        if user.status == UserStatusEnum.PENDING_ONBOARDING:
+        if user.status == UserStatusEnum.PENDING_ONBOARDING.value:
             success_url = (
                 f"{settings.security.app_deep_link}?ok=true&"
                 f"need_onboarding=true&"

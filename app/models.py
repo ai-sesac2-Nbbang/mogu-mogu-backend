@@ -89,28 +89,58 @@ class User(Base):
     phone_number: Mapped[str | None] = mapped_column(Text, nullable=True)
     birth_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     gender: Mapped[str | None] = mapped_column(
-        SQLEnum(GenderEnum, name="gender_enum", create_type=True), nullable=True
+        SQLEnum(
+            GenderEnum,
+            name="gender_enum",
+            create_type=True,
+            values_callable=lambda x: [e.value for e in x],
+        ),
+        nullable=True,
     )
 
     # 관심사
     interested_categories: Mapped[list[str] | None] = mapped_column(
-        ARRAY(SQLEnum(CategoryEnum, name="category_enum", create_type=True)),
+        ARRAY(
+            SQLEnum(
+                CategoryEnum,
+                name="category_enum",
+                create_type=True,
+                values_callable=lambda x: [e.value for e in x],
+            )
+        ),
         nullable=True,
     )
     household_size: Mapped[str | None] = mapped_column(
-        SQLEnum(HouseholdSizeEnum, name="household_size_enum", create_type=True),
+        SQLEnum(
+            HouseholdSizeEnum,
+            name="household_size_enum",
+            create_type=True,
+            values_callable=lambda x: [e.value for e in x],
+        ),
         nullable=True,
     )
     wish_markets: Mapped[list[str] | None] = mapped_column(
-        ARRAY(SQLEnum(MarketEnum, name="market_enum", create_type=True)),
+        ARRAY(
+            SQLEnum(
+                MarketEnum,
+                name="market_enum",
+                create_type=True,
+                values_callable=lambda x: [e.value for e in x],
+            )
+        ),
         nullable=True,
     )
 
     # 사용자 상태
     status: Mapped[str] = mapped_column(
-        SQLEnum(UserStatusEnum, name="user_status_enum", create_type=True),
+        SQLEnum(
+            UserStatusEnum,
+            name="user_status_enum",
+            create_type=True,
+            values_callable=lambda x: [e.value for e in x],
+        ),
         nullable=False,
-        default=UserStatusEnum.PENDING_ONBOARDING,
+        default=UserStatusEnum.PENDING_ONBOARDING.value,
     )
 
     # 신고/관리
