@@ -15,6 +15,7 @@ from app.core.security.kakao import (
     get_kakao_login_url,
     get_kakao_user_info,
 )
+from app.enums import UserStatusEnum
 from app.models import RefreshToken, User
 from app.schemas.requests import RefreshTokenRequest
 from app.schemas.responses import AccessTokenResponse
@@ -97,31 +98,24 @@ async def kakao_callback(
                 error_url = f"{settings.security.app_deep_link}?ok=false&message={'카카오 계정에서 이메일 정보를 가져올 수 없습니다.'}"
                 return RedirectResponse(url=error_url)
 
-            # 이메일로 기존 사용자 확인
-            existing_user = await session.scalar(
-                select(User).where(User.email == email)
-            )
+            # 카카오 프로필 정보 추출
+            profile = kakao_account.get("profile", {})
+            nickname = profile.get("nickname")
+            profile_image_url = profile.get("profile_image_url")
 
-            if existing_user:
-                # 기존 사용자에 카카오 정보 연결
-                existing_user.kakao_id = kakao_user_info.id
-                existing_user.provider = "kakao"
-                user = existing_user
-            else:
-                # 새 사용자 생성
-                user = User(
-                    email=email,
-                    kakao_id=kakao_user_info.id,
-                    provider="kakao",
-                )
-                session.add(user)
-                await session.commit()
-        else:
-            # 기존 카카오 사용자
+            # 새 사용자 생성 (status=pending_onboarding)
+            user = User(
+                email=email,
+                kakao_id=kakao_user_info.id,
+                provider="kakao",
+                nickname=nickname,
+                profile_image_url=profile_image_url,
+                status=UserStatusEnum.PENDING_ONBOARDING.value,
+            )
             session.add(user)
             await session.commit()
 
-        # 4. JWT 토큰 생성
+        # 4. JWT 토큰 생성 (상태와 무관하게 항상 발급)
         jwt_token = create_jwt_token(user_id=user.id)
 
         # 5. 리프레시 토큰 생성
@@ -133,15 +127,30 @@ async def kakao_callback(
         session.add(refresh_token)
         await session.commit()
 
-        # 6. 앱으로 토큰과 함께 리다이렉트
+        # 6. 사용자 상태에 따라 다른 응답
         settings = get_settings()
-        success_url = (
-            f"{settings.security.app_deep_link}?ok=true&"
-            f"access_token={jwt_token.access_token}&"
-            f"expires_at={jwt_token.payload.exp}&"
-            f"refresh_token={refresh_token.refresh_token}&"
-            f"refresh_token_expires_at={refresh_token.exp}"
-        )
+
+        # 온보딩이 필요한 경우
+        if user.status == UserStatusEnum.PENDING_ONBOARDING.value:
+            success_url = (
+                f"{settings.security.app_deep_link}?ok=true&"
+                f"need_onboarding=true&"
+                f"access_token={jwt_token.access_token}&"
+                f"expires_at={jwt_token.payload.exp}&"
+                f"refresh_token={refresh_token.refresh_token}&"
+                f"refresh_token_expires_at={refresh_token.exp}"
+            )
+        else:
+            # 이미 온보딩 완료된 사용자 - 일반 로그인
+            success_url = (
+                f"{settings.security.app_deep_link}?ok=true&"
+                f"need_onboarding=false&"
+                f"access_token={jwt_token.access_token}&"
+                f"expires_at={jwt_token.payload.exp}&"
+                f"refresh_token={refresh_token.refresh_token}&"
+                f"refresh_token_expires_at={refresh_token.exp}"
+            )
+
         return RedirectResponse(url=success_url)
 
     except HTTPException as e:

@@ -32,4 +32,3 @@ async def test_read_current_user_response(
     assert response_data["email"] == default_user_email
     assert "provider" in response_data
     assert "kakao_id" in response_data
-    assert "kakao_connected_at" in response_data

@@ -20,9 +20,10 @@ async def read_current_user(
     return UserResponse(
         user_id=current_user.id,
         email=current_user.email,
+        nickname=current_user.nickname,
+        profile_image_url=current_user.profile_image_url,
         provider=current_user.provider,
         kakao_id=current_user.kakao_id,
-        kakao_connected_at=current_user.created_at.isoformat(),
     )
 
 

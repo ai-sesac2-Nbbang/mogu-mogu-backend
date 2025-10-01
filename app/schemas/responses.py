@@ -16,9 +16,10 @@ class AccessTokenResponse(BaseResponse):
 class UserResponse(BaseResponse):
     user_id: str
     email: EmailStr
+    nickname: str | None = None
+    profile_image_url: str | None = None
     provider: str | None = None
     kakao_id: int | None = None
-    kakao_connected_at: str | None = None
 
 
 class KakaoUserResponse(BaseResponse):
