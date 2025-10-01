@@ -4,6 +4,7 @@ from fastapi.middleware.trustedhost import TrustedHostMiddleware
 
 from app.api.api_router import api_router, auth_router
 from app.core.config import get_settings
+from app.core.logging_middleware import LoggingMiddleware
 
 app = FastAPI(
     title="Mogu Mogu Backend",
@@ -22,6 +23,8 @@ app.include_router(api_router)
 async def health() -> dict[str, str]:
     return {"message": "OK"}
 
+
+app.add_middleware(LoggingMiddleware)
 
 # Sets all CORS enabled origins
 app.add_middleware(
