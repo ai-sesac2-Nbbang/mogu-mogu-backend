@@ -8,11 +8,24 @@ from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import Response
 
+from app.core.config import get_settings
+
 # 색상 없이 단순한 로깅
 
 # 응답 시간 임계값 (밀리초)
 SLOW_RESPONSE_THRESHOLD_MS = 1000  # 1초
 MEDIUM_RESPONSE_THRESHOLD_MS = 500  # 0.5초
+
+
+# 개발 환경 감지
+def is_development() -> bool:
+    """개발 환경인지 확인"""
+    settings = get_settings()
+    return settings.environment.lower() in [
+        "development",
+        "dev",
+        "local",
+    ]
 
 
 class LoggingMiddleware(BaseHTTPMiddleware):
@@ -176,6 +189,10 @@ class LoggingMiddleware(BaseHTTPMiddleware):
 
     def _mask_sensitive_header(self, key: str, value: str) -> str:
         """민감한 헤더 마스킹"""
+        # 개발 환경에서는 마스킹하지 않음
+        if is_development():
+            return value
+
         if key.lower() in self.SENSITIVE_HEADERS:
             if key.lower() == "authorization" and value.startswith("Bearer "):
                 # Bearer 토큰은 앞부분만 표시
@@ -186,6 +203,10 @@ class LoggingMiddleware(BaseHTTPMiddleware):
 
     def _mask_sensitive_body(self, body: Any) -> Any:
         """민감한 본문 필드 마스킹"""
+        # 개발 환경에서는 마스킹하지 않음
+        if is_development():
+            return body
+
         if isinstance(body, dict):
             return {
                 key: (

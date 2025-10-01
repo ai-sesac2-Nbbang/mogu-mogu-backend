@@ -62,6 +62,7 @@ class Settings(BaseSettings):
     database: Database = Field(default_factory=Database)
     kakao: Kakao = Field(default_factory=Kakao)
     log_level: str = "INFO"
+    environment: str = "development"
 
     @computed_field  # type: ignore[prop-decorator]
     @property
