@@ -1,7 +1,7 @@
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from geoalchemy2.shape import from_shape
+from geoalchemy2.shape import from_shape, to_shape
 from shapely.geometry import Point
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -10,7 +10,7 @@ from app.api import deps
 from app.enums import UserStatusEnum
 from app.models import User, UserWishSpot
 from app.schemas.requests import UserUpdateRequest, WishSpotCreateRequest
-from app.schemas.responses import UserResponse
+from app.schemas.responses import UserResponse, WishSpotResponse
 
 router = APIRouter()
 
@@ -99,6 +99,40 @@ async def update_current_user(
         created_at=current_user.created_at,
         updated_at=current_user.updated_at,
     )
+
+
+@router.get(
+    "/me/wish-spots",
+    response_model=list[WishSpotResponse],
+    description="Get current user's wish spots",
+)
+async def get_wish_spots(
+    current_user: User = Depends(deps.get_current_user),
+    session: AsyncSession = Depends(deps.get_session),
+) -> list[WishSpotResponse]:
+    """현재 사용자의 관심 장소 목록 조회"""
+    result = await session.execute(
+        select(UserWishSpot)
+        .where(UserWishSpot.user_id == current_user.id)
+        .order_by(UserWishSpot.created_at)
+    )
+    spots = result.scalars().all()
+
+    # Geography를 위도/경도로 변환
+    response = []
+    for spot in spots:
+        point = to_shape(spot.location)
+        response.append(
+            WishSpotResponse(
+                id=spot.id,
+                label=spot.label,
+                longitude=point.x,  # 경도
+                latitude=point.y,  # 위도
+                created_at=spot.created_at,
+            )
+        )
+
+    return response
 
 
 @router.post(

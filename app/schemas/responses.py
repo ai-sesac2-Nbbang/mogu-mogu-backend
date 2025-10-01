@@ -48,6 +48,14 @@ class UserResponse(BaseResponse):
     updated_at: datetime
 
 
+class WishSpotResponse(BaseResponse):
+    id: int
+    label: str
+    latitude: float
+    longitude: float
+    created_at: datetime
+
+
 class KakaoUserResponse(BaseResponse):
     kakao_id: int
     nickname: str | None = None
