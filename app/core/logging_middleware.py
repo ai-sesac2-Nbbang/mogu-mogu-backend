@@ -91,8 +91,13 @@ class LoggingMiddleware(BaseHTTPMiddleware):
         try:
             # Response body를 바이트로 수집
             body_bytes = b""
-            async for chunk in response.body_iterator:
-                body_bytes += chunk
+            # body_iterator가 있는지 확인 후 사용
+            if hasattr(response, "body_iterator"):
+                async for chunk in response.body_iterator:
+                    body_bytes += chunk
+            else:
+                # body_iterator가 없는 경우 빈 바이트 반환
+                body_bytes = b""
 
             # 크기 제한 확인
             if len(body_bytes) > self.MAX_BODY_SIZE:
