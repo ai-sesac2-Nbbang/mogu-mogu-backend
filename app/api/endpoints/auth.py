@@ -1,3 +1,4 @@
+import logging
 import secrets
 import time
 from typing import Any
@@ -22,6 +23,7 @@ from app.schemas.requests import RefreshTokenRequest
 from app.schemas.responses import AccessTokenResponse
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 REFRESH_TOKEN_RESPONSES: dict[int | str, dict[str, Any]] = {
     400: {
@@ -165,6 +167,7 @@ async def kakao_callback(
             )
 
         success_url = f"{settings.security.app_deep_link}?{success_params}"
+        logger.info(f"🔗 Redirecting to app (success): {success_url}")
         return RedirectResponse(url=success_url, status_code=status.HTTP_302_FOUND)
 
     except HTTPException as e:
@@ -172,6 +175,7 @@ async def kakao_callback(
         settings = get_settings()
         error_params = urlencode({"ok": "false", "message": str(e.detail)})
         error_url = f"{settings.security.app_deep_link}?{error_params}"
+        logger.warning(f"⚠️ Redirecting to app (HTTP error): {error_url}")
         return RedirectResponse(url=error_url, status_code=status.HTTP_302_FOUND)
     except Exception as e:
         # 기타 예외를 앱으로 전달
@@ -183,6 +187,7 @@ async def kakao_callback(
             }
         )
         error_url = f"{settings.security.app_deep_link}?{error_params}"
+        logger.error(f"❌ Redirecting to app (error): {error_url}", exc_info=True)
         return RedirectResponse(url=error_url, status_code=status.HTTP_302_FOUND)
 
 
