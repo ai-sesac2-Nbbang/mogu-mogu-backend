@@ -99,16 +99,16 @@ class LoggingMiddleware(BaseHTTPMiddleware):
                 # body_iterator가 없는 경우 빈 바이트 반환
                 body_bytes = b""
 
-            # 크기 제한 확인
+            # 로깅용 body 문자열 생성 (truncation 적용)
             if len(body_bytes) > self.MAX_BODY_SIZE:
-                body_bytes = body_bytes[: self.MAX_BODY_SIZE]
+                truncated_bytes = body_bytes[: self.MAX_BODY_SIZE]
                 body_str = (
-                    body_bytes.decode("utf-8", errors="ignore") + "...[TRUNCATED]"
+                    truncated_bytes.decode("utf-8", errors="ignore") + "...[TRUNCATED]"
                 )
             else:
-                body_str = body_bytes.decode("utf-8")
+                body_str = body_bytes.decode("utf-8", errors="ignore")
 
-            # JSON 파싱 시도
+            # JSON 파싱 시도 (로깅용)
             try:
                 body_json = json.loads(body_str)
                 parsed_body = self._mask_sensitive_body(body_json)
@@ -251,6 +251,11 @@ class LoggingMiddleware(BaseHTTPMiddleware):
             time_emoji = "⏱️"
         else:
             time_emoji = "✅"
+
+        # OpenAPI 스펙이나 Swagger UI HTML은 로깅 제외
+        request_path = request_info.get("path", "")
+        if request_path in ["/openapi.json", "/", "/docs", "/redoc"]:
+            return
 
         # Response body가 있으면 출력
         if response_info.get("body"):
