@@ -1,6 +1,7 @@
 import secrets
 import time
 from typing import Any
+from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import RedirectResponse
@@ -95,8 +96,16 @@ async def kakao_callback(
             if not email:
                 # 이메일이 없는 경우 앱으로 에러와 함께 리다이렉트
                 settings = get_settings()
-                error_url = f"{settings.security.app_deep_link}?ok=false&message={'카카오 계정에서 이메일 정보를 가져올 수 없습니다.'}"
-                return RedirectResponse(url=error_url)
+                error_params = urlencode(
+                    {
+                        "ok": "false",
+                        "message": "카카오 계정에서 이메일 정보를 가져올 수 없습니다.",
+                    }
+                )
+                error_url = f"{settings.security.app_deep_link}?{error_params}"
+                return RedirectResponse(
+                    url=error_url, status_code=status.HTTP_302_FOUND
+                )
 
             # 카카오 프로필 정보 추출
             profile = kakao_account.get("profile", {})
@@ -132,37 +141,49 @@ async def kakao_callback(
 
         # 온보딩이 필요한 경우
         if user.status == UserStatusEnum.PENDING_ONBOARDING.value:
-            success_url = (
-                f"{settings.security.app_deep_link}?ok=true&"
-                f"need_onboarding=true&"
-                f"access_token={jwt_token.access_token}&"
-                f"expires_at={jwt_token.payload.exp}&"
-                f"refresh_token={refresh_token.refresh_token}&"
-                f"refresh_token_expires_at={refresh_token.exp}"
+            success_params = urlencode(
+                {
+                    "ok": "true",
+                    "need_onboarding": "true",
+                    "access_token": jwt_token.access_token,
+                    "expires_at": str(jwt_token.payload.exp),
+                    "refresh_token": refresh_token.refresh_token,
+                    "refresh_token_expires_at": str(refresh_token.exp),
+                }
             )
         else:
             # 이미 온보딩 완료된 사용자 - 일반 로그인
-            success_url = (
-                f"{settings.security.app_deep_link}?ok=true&"
-                f"need_onboarding=false&"
-                f"access_token={jwt_token.access_token}&"
-                f"expires_at={jwt_token.payload.exp}&"
-                f"refresh_token={refresh_token.refresh_token}&"
-                f"refresh_token_expires_at={refresh_token.exp}"
+            success_params = urlencode(
+                {
+                    "ok": "true",
+                    "need_onboarding": "false",
+                    "access_token": jwt_token.access_token,
+                    "expires_at": str(jwt_token.payload.exp),
+                    "refresh_token": refresh_token.refresh_token,
+                    "refresh_token_expires_at": str(refresh_token.exp),
+                }
             )
 
-        return RedirectResponse(url=success_url)
+        success_url = f"{settings.security.app_deep_link}?{success_params}"
+        return RedirectResponse(url=success_url, status_code=status.HTTP_302_FOUND)
 
     except HTTPException as e:
         # HTTP 예외를 앱으로 전달
         settings = get_settings()
-        error_url = f"{settings.security.app_deep_link}?ok=false&message={e.detail}"
-        return RedirectResponse(url=error_url)
+        error_params = urlencode({"ok": "false", "message": str(e.detail)})
+        error_url = f"{settings.security.app_deep_link}?{error_params}"
+        return RedirectResponse(url=error_url, status_code=status.HTTP_302_FOUND)
     except Exception as e:
         # 기타 예외를 앱으로 전달
         settings = get_settings()
-        error_url = f"{settings.security.app_deep_link}?ok=false&message=카카오 로그인 처리 중 오류가 발생했습니다: {str(e)}"
-        return RedirectResponse(url=error_url)
+        error_params = urlencode(
+            {
+                "ok": "false",
+                "message": f"카카오 로그인 처리 중 오류가 발생했습니다: {str(e)}",
+            }
+        )
+        error_url = f"{settings.security.app_deep_link}?{error_params}"
+        return RedirectResponse(url=error_url, status_code=status.HTTP_302_FOUND)
 
 
 @router.post(
