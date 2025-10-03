@@ -35,3 +35,21 @@ async def get_current_user(
             detail=api_messages.JWT_ERROR_USER_REMOVED,
         )
     return user
+
+
+async def get_current_user_optional(
+    token: Annotated[
+        HTTPAuthorizationCredentials | None, Depends(bearer_scheme)
+    ] = None,
+    session: AsyncSession = Depends(get_session),
+) -> User | None:
+    """선택적 인증 - 토큰이 있으면 사용자 정보를 반환하고, 없으면 None을 반환합니다."""
+    if token is None:
+        return None
+
+    try:
+        token_payload = verify_jwt_token(token.credentials)
+        user = await session.scalar(select(User).where(User.id == token_payload.sub))
+        return user
+    except HTTPException:
+        return None

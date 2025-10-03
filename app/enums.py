@@ -74,3 +74,10 @@ class UserStatusEnum(str, enum.Enum):
     ACTIVE = "active"  # 활성 사용자 (온보딩 완료)
     INACTIVE = "inactive"  # 비활성
     SUSPENDED = "suspended"  # 정지
+
+
+class RatingKeywordTypeEnum(str, enum.Enum):
+    """평가 키워드 타입"""
+
+    POSITIVE = "positive"
+    NEGATIVE = "negative"
