@@ -7,7 +7,7 @@ from sqlalchemy.orm import selectinload
 
 from app.api import api_messages, deps
 from app.core.database_session import get_async_session
-from app.enums import PostStatusEnum
+from app.enums import ParticipationStatusEnum, PostStatusEnum
 from app.models import MoguFavorite, MoguPost, MoguPostImage, Participation, User
 from app.schemas.requests import (
     MoguPostCreateRequest,
@@ -267,6 +267,208 @@ async def get_mogu_posts(
         page=params.page,
         size=params.size,
         has_next=offset + params.size < total,
+    )
+
+
+@router.get(
+    "/my-posts",
+    response_model=MoguPostListPaginatedResponse,
+    description="내가 작성한 게시물 목록",
+)
+async def get_my_posts(
+    status: str | None = None,
+    page: int = 1,
+    size: int = 20,
+    current_user: User = Depends(deps.get_current_user),
+    session: AsyncSession = Depends(get_async_session),
+) -> MoguPostListPaginatedResponse:
+    """내가 작성한 모구 게시물 목록을 조회합니다."""
+
+    # 기본 쿼리 구성
+    query = (
+        select(MoguPost)
+        .where(MoguPost.user_id == current_user.id)
+        .options(selectinload(MoguPost.images))
+    )
+
+    # 상태 필터 적용
+    if status:
+        try:
+            status_enum = PostStatusEnum(status)
+            query = query.where(MoguPost.status == status_enum)
+        except ValueError:
+            raise HTTPException(
+                status_code=400,
+                detail=api_messages.INVALID_STATUS_VALUE,
+            )
+
+    # 정렬 (최신순)
+    query = query.order_by(desc(MoguPost.created_at))
+
+    # 전체 개수 조회
+    count_query = select(func.count()).select_from(query.subquery())
+    count_result = await session.execute(count_query)
+    total = count_result.scalar() or 0
+
+    # 페이지네이션 적용
+    offset = (page - 1) * size
+    query = query.offset(offset).limit(size)
+
+    # 쿼리 실행
+    result = await session.execute(query)
+    posts = result.scalars().all()
+
+    # 응답 데이터 구성
+    items = []
+    for post in posts:
+        # PostGIS 좌표 추출
+        point = to_shape(post.mogu_spot)
+        latitude = point.y
+        longitude = point.x
+
+        items.append(
+            MoguPostListResponse(
+                id=post.id,
+                user_id=post.user_id,
+                title=post.title,
+                description=post.description,
+                price=post.price,
+                category=post.category,
+                mogu_market=post.mogu_market,
+                mogu_spot={"latitude": latitude, "longitude": longitude},
+                mogu_datetime=post.mogu_datetime,
+                status=post.status,
+                target_count=post.target_count,
+                joined_count=post.joined_count,
+                created_at=post.created_at,
+                images=(
+                    [
+                        {
+                            "id": img.id,
+                            "image_url": img.image_url,
+                            "sort_order": img.sort_order,
+                            "is_thumbnail": img.is_thumbnail,
+                        }
+                        for img in post.images
+                    ]
+                    if post.images
+                    else None
+                ),
+                user={"user_id": current_user.id, "nickname": current_user.nickname},
+                my_participation=None,  # 내가 작성한 게시물이므로 참여 정보 없음
+                is_favorited=False,  # 내가 작성한 게시물이므로 찜하기 정보 없음
+            )
+        )
+
+    return MoguPostListPaginatedResponse(
+        items=items,
+        total=total,
+        page=page,
+        size=size,
+        has_next=(page * size) < total,
+    )
+
+
+@router.get(
+    "/my-participations",
+    response_model=MoguPostListPaginatedResponse,
+    description="내가 참여한 게시물 목록",
+)
+async def get_my_participations(
+    status: str | None = None,
+    page: int = 1,
+    size: int = 20,
+    current_user: User = Depends(deps.get_current_user),
+    session: AsyncSession = Depends(get_async_session),
+) -> MoguPostListPaginatedResponse:
+    """내가 참여한 모구 게시물 목록을 조회합니다."""
+
+    # 기본 쿼리 구성 (참여 테이블과 조인)
+    query = (
+        select(MoguPost, Participation)
+        .join(Participation, MoguPost.id == Participation.mogu_post_id)
+        .where(Participation.user_id == current_user.id)
+        .options(selectinload(MoguPost.images), selectinload(MoguPost.user))
+    )
+
+    # 상태 필터 적용
+    if status:
+        try:
+            status_enum = ParticipationStatusEnum(status)
+            query = query.where(Participation.status == status_enum)
+        except ValueError:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid participation status value",
+            )
+
+    # 정렬 (참여 신청일 최신순)
+    query = query.order_by(desc(Participation.applied_at))
+
+    # 전체 개수 조회
+    count_query = select(func.count()).select_from(query.subquery())
+    count_result = await session.execute(count_query)
+    total = count_result.scalar() or 0
+
+    # 페이지네이션 적용
+    offset = (page - 1) * size
+    query = query.offset(offset).limit(size)
+
+    # 쿼리 실행
+    result = await session.execute(query)
+    rows = result.all()
+
+    # 응답 데이터 구성
+    items = []
+    for post, participation in rows:
+        # PostGIS 좌표 추출
+        point = to_shape(post.mogu_spot)
+        latitude = point.y
+        longitude = point.x
+
+        items.append(
+            MoguPostListResponse(
+                id=post.id,
+                user_id=post.user_id,
+                title=post.title,
+                description=post.description,
+                price=post.price,
+                category=post.category,
+                mogu_market=post.mogu_market,
+                mogu_spot={"latitude": latitude, "longitude": longitude},
+                mogu_datetime=post.mogu_datetime,
+                status=post.status,
+                target_count=post.target_count,
+                joined_count=post.joined_count,
+                created_at=post.created_at,
+                images=(
+                    [
+                        {
+                            "id": img.id,
+                            "image_url": img.image_url,
+                            "sort_order": img.sort_order,
+                            "is_thumbnail": img.is_thumbnail,
+                        }
+                        for img in post.images
+                    ]
+                    if post.images
+                    else None
+                ),
+                user={"user_id": post.user.id, "nickname": post.user.nickname},
+                my_participation={
+                    "status": participation.status,
+                    "applied_at": participation.applied_at,
+                },
+                is_favorited=False,  # 찜하기 정보는 별도 조회 필요
+            )
+        )
+
+    return MoguPostListPaginatedResponse(
+        items=items,
+        total=total,
+        page=page,
+        size=size,
+        has_next=(page * size) < total,
     )
 
 
