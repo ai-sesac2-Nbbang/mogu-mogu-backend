@@ -374,7 +374,7 @@ async def get_mogu_post(
     )
 
 
-@router.put(
+@router.patch(
     "/{post_id}", response_model=MoguPostResponse, description="모구 게시물 수정"
 )
 async def update_mogu_post(
