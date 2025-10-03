@@ -63,6 +63,7 @@ Enum participation_status_enum {
   fulfilled
 }
 
+
 /* ---------- Tables ---------- */
 
 Table app_user {
@@ -187,7 +188,7 @@ Table rating {
   reviewer_id  uuid        [not null, note: '평가자']
   reviewee_id  uuid        [not null, note: '피평가자']
   stars        int         [not null, note: 'CHECK (stars BETWEEN 1 AND 5)']
-  keywords     text[]      [note: '고정 키워드 선택값']
+  keywords     text[]      [note: '평가 키워드 코드 배열 (rating_keyword_master.code 참조)']
   created_at   timestamptz [not null, default: `now()`]
 
   Note: '평가 (모구 완료 후)'
@@ -207,6 +208,31 @@ Table mogu_favorite {
     (user_id, mogu_post_id) [pk]
     user_id [name: 'idx_mogu_favorite_user_id']
     mogu_post_id [name: 'idx_mogu_favorite_mogu_post_id']
+  }
+}
+
+Table rating_keyword_master {
+  id           serial      [pk]
+  code         text        [not null, unique, note: '키워드 코드 (예: friendly_communication)']
+  name_kr      text        [not null, note: '한국어 키워드 이름']
+  type         text        [not null, note: 'positive 또는 negative']
+  created_at   timestamptz [not null, default: `now()`]
+
+  Note: '평가 키워드 마스터 데이터'
+}
+
+Table user_keyword_stats {
+  user_id      uuid        [not null]
+  keyword_code text        [not null, note: 'rating_keyword_master.code 참조']
+  count        int         [not null, default: 0]
+  last_updated timestamptz [not null, default: `now()`]
+
+  Note: '사용자별 키워드 통계'
+
+  Indexes {
+    (user_id, keyword_code) [pk]
+    user_id [name: 'idx_user_keyword_stats_user_id']
+    keyword_code [name: 'idx_user_keyword_stats_keyword_code']
   }
 }
 
@@ -232,3 +258,6 @@ Ref: rating.reviewee_id  > app_user.id
 
 Ref: mogu_favorite.user_id > app_user.id
 Ref: mogu_favorite.mogu_post_id > mogu_post.id
+
+Ref: user_keyword_stats.user_id > app_user.id
+Ref: user_keyword_stats.keyword_code > rating_keyword_master.code
