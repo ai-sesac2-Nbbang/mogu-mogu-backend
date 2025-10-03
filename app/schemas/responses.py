@@ -101,3 +101,75 @@ class UserKeywordStatsSummaryResponse(BaseResponse):
     total_positive_count: int
     total_negative_count: int
     last_updated: datetime
+
+
+# 모구 게시물 관련 Response 스키마
+class MoguSpotResponse(BaseResponse):
+    latitude: float
+    longitude: float
+
+
+class MoguPostImageResponse(BaseResponse):
+    id: str
+    image_url: str
+    sort_order: int
+    is_thumbnail: bool
+
+
+class MoguPostUserResponse(BaseResponse):
+    id: str
+    nickname: str
+    profile_image_url: str | None = None
+
+
+class MoguPostParticipationResponse(BaseResponse):
+    status: str
+    joined_at: datetime | None = None
+
+
+class MoguPostResponse(BaseResponse):
+    id: str
+    user_id: str
+    title: str
+    description: str | None = None
+    price: int
+    category: str
+    mogu_market: str
+    mogu_spot: dict[str, float]
+    mogu_datetime: datetime
+    status: str
+    target_count: int | None = None
+    joined_count: int
+    created_at: datetime
+    images: list[dict[str, Any]] | None = None
+    user: dict[str, str | None]
+    my_participation: dict[str, Any] | None = None
+    is_favorited: bool | None = None
+
+
+class MoguPostListResponse(BaseResponse):
+    id: str
+    user_id: str
+    title: str
+    description: str | None = None
+    price: int
+    category: str
+    mogu_market: str
+    mogu_spot: dict[str, float]
+    mogu_datetime: datetime
+    status: str
+    target_count: int | None = None
+    joined_count: int
+    created_at: datetime
+    images: list[dict[str, Any]] | None = None
+    user: dict[str, str | None]
+    my_participation: dict[str, Any] | None = None
+    is_favorited: bool | None = None
+
+
+class MoguPostListPaginatedResponse(BaseResponse):
+    items: list[MoguPostListResponse]
+    total: int
+    page: int
+    size: int
+    has_next: bool
