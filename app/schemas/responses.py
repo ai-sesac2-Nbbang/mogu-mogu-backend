@@ -1,4 +1,5 @@
 from datetime import date, datetime
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, EmailStr
 
@@ -37,6 +38,7 @@ class UserResponse(BaseResponse):
     interested_categories: list[str] | None = None
     household_size: str | None = None
     wish_markets: list[str] | None = None
+    wish_times: list[int] | None = None
 
     # 상태
     status: str
@@ -62,3 +64,40 @@ class KakaoUserResponse(BaseResponse):
     profile_image: str | None = None
     email: str | None = None
     connected_at: str
+
+
+# 찜하기 관련 응답 스키마
+class MoguFavoriteResponse(BaseResponse):
+    user_id: str
+    mogu_post_id: str
+    created_at: datetime
+
+
+class MoguFavoriteStatusResponse(BaseResponse):
+    is_favorited: bool
+    favorited_at: datetime | None = None
+
+
+# 키워드 관련 응답 스키마
+class RatingKeywordMasterResponse(BaseResponse):
+    id: int
+    code: str
+    name_kr: str
+    type: str  # positive 또는 negative
+    created_at: datetime
+
+
+class UserKeywordStatsResponse(BaseResponse):
+    user_id: str
+    keyword_code: str
+    count: int
+    last_updated: datetime
+
+
+class UserKeywordStatsSummaryResponse(BaseResponse):
+    user_id: str
+    positive_keywords: list[dict[str, Any]]
+    negative_keywords: list[dict[str, Any]]
+    total_positive_count: int
+    total_negative_count: int
+    last_updated: datetime
