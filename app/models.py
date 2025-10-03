@@ -39,6 +39,7 @@ from app.enums import (
     MarketEnum,
     ParticipationStatusEnum,
     PostStatusEnum,
+    RatingKeywordTypeEnum,
     UserStatusEnum,
 )
 
@@ -132,6 +133,9 @@ class User(Base):
         ),
         nullable=True,
     )
+    wish_times: Mapped[list[int]] = mapped_column(
+        ARRAY(BigInteger), nullable=False, default=lambda: [0] * 24
+    )
 
     # 사용자 상태
     status: Mapped[str] = mapped_column(
@@ -176,6 +180,12 @@ class User(Base):
     )
     ratings_received: Mapped[list["Rating"]] = relationship(
         foreign_keys="Rating.reviewee_id", back_populates="reviewee"
+    )
+    favorites: Mapped[list["MoguFavorite"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
+    keyword_stats: Mapped[list["UserKeywordStats"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
     )
 
 
@@ -259,6 +269,9 @@ class MoguPost(Base):
         back_populates="mogu_post", cascade="all, delete-orphan"
     )
     ratings: Mapped[list["Rating"]] = relationship(
+        back_populates="mogu_post", cascade="all, delete-orphan"
+    )
+    favorites: Mapped[list["MoguFavorite"]] = relationship(
         back_populates="mogu_post", cascade="all, delete-orphan"
     )
 
@@ -378,4 +391,66 @@ class Rating(Base):
     )
     reviewee: Mapped["User"] = relationship(
         foreign_keys=[reviewee_id], back_populates="ratings_received"
+    )
+
+
+class MoguFavorite(Base):
+    """모구 게시물 찜하기"""
+
+    __tablename__ = "mogu_favorite"
+
+    user_id: Mapped[str] = mapped_column(
+        ForeignKey("app_user.id", ondelete="CASCADE"), primary_key=True
+    )
+    mogu_post_id: Mapped[str] = mapped_column(
+        ForeignKey("mogu_post.id", ondelete="CASCADE"), primary_key=True
+    )
+
+    user: Mapped["User"] = relationship(back_populates="favorites")
+    mogu_post: Mapped["MoguPost"] = relationship(back_populates="favorites")
+
+
+class RatingKeywordMaster(Base):
+    """평가 키워드 마스터 데이터"""
+
+    __tablename__ = "rating_keyword_master"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    code: Mapped[str] = mapped_column(Text, nullable=False, unique=True, index=True)
+    name_kr: Mapped[str] = mapped_column(Text, nullable=False)
+    type: Mapped[str] = mapped_column(
+        SQLEnum(
+            RatingKeywordTypeEnum,
+            name="rating_keyword_type_enum",
+            create_type=True,
+            values_callable=lambda x: [e.value for e in x],
+        ),
+        nullable=False,
+    )
+
+    # 관계
+    user_keyword_stats: Mapped[list["UserKeywordStats"]] = relationship(
+        back_populates="keyword_master"
+    )
+
+
+class UserKeywordStats(Base):
+    """사용자별 키워드 통계"""
+
+    __tablename__ = "user_keyword_stats"
+
+    user_id: Mapped[str] = mapped_column(
+        ForeignKey("app_user.id", ondelete="CASCADE"), primary_key=True
+    )
+    keyword_code: Mapped[str] = mapped_column(
+        ForeignKey("rating_keyword_master.code", ondelete="CASCADE"), primary_key=True
+    )
+    count: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    last_updated: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+    user: Mapped["User"] = relationship(back_populates="keyword_stats")
+    keyword_master: Mapped["RatingKeywordMaster"] = relationship(
+        back_populates="user_keyword_stats"
     )
