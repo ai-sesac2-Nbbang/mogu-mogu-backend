@@ -4,6 +4,8 @@
 
 ## 🚀 빠른 시작
 
+### 방법 1: Docker 사용 (권장)
+
 ```bash
 # 1. 의존성 설치
 poetry install
@@ -14,6 +16,31 @@ cp .env.example .env
 
 # 3. 데이터베이스 실행
 docker compose up -d
+
+# 4. 마이그레이션 실행
+poetry run alembic upgrade head
+
+# 5. 서버 실행
+poetry run uvicorn app.main:app --reload
+```
+
+### 방법 2: 로컬 PostgreSQL 설치
+
+```bash
+# 1. 의존성 설치
+poetry install
+
+# 2. 환경 변수 설정
+cp .env.example .env
+# .env 파일에서 카카오 로그인 설정을 수정하세요
+
+# 3. PostgreSQL 로컬 설치
+: '
+- https://www.enterprisedb.com/downloads/postgres-postgresql-downloads에서 PostgreSQL 17.6 Windows x86-64 다운로드
+- 설치 후 Application Stack Builder > Spatial Extensions에서 PostGIS 설치
+- pgAdmin4에서 데이터베이스 생성 및 접속 정보 확인
+- .env 파일에 PostgreSQL 접속 정보 입력
+'
 
 # 4. 마이그레이션 실행
 poetry run alembic upgrade head
