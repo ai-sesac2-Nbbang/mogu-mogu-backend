@@ -63,6 +63,11 @@ Enum participation_status_enum {
   fulfilled
 }
 
+Enum rating_keyword_type_enum {
+  positive
+  negative
+}
+
 
 /* ---------- Tables ---------- */
 
@@ -215,7 +220,7 @@ Table rating_keyword_master {
   id           serial      [pk]
   code         text        [not null, unique, note: '키워드 코드 (예: friendly_communication)']
   name_kr      text        [not null, note: '한국어 키워드 이름']
-  type         text        [not null, note: 'positive 또는 negative']
+  type         rating_keyword_type_enum [not null, note: 'positive 또는 negative']
   created_at   timestamptz [not null, default: `now()`]
 
   Note: '평가 키워드 마스터 데이터'
