@@ -171,3 +171,17 @@ class ParticipationStatusUpdateRequest(BaseRequest):
     """참여 상태 업데이트 (승인/거부/노쇼/완료)"""
 
     status: str  # "accepted", "rejected", "no_show", "fulfilled"
+
+
+# Q&A 관련 Request 스키마
+class QuestionCreateRequest(BaseRequest):
+    """질문 작성"""
+
+    question: str
+    is_private: bool = False
+
+
+class AnswerCreateRequest(BaseRequest):
+    """답변 작성"""
+
+    answer: str
