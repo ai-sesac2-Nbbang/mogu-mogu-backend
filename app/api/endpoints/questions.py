@@ -1,5 +1,4 @@
 from datetime import datetime
-from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import and_, select
@@ -7,11 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.api import api_messages, deps
-from app.api.common import (
-    _build_question_response,
-    _check_qa_activity_allowed,
-    _get_mogu_post,
-)
+from app.api.common import _check_qa_activity_allowed, _get_mogu_post
 from app.core.database_session import get_async_session
 from app.models import MoguPost, QuestionAnswer, User
 from app.schemas.requests import (
@@ -21,6 +16,7 @@ from app.schemas.requests import (
     QuestionUpdateRequest,
 )
 from app.schemas.responses import (
+    QuestionAnswerConverter,
     QuestionListResponse,
     QuestionResponse,
     QuestionWithAnswerResponse,
@@ -51,17 +47,6 @@ async def _get_question(
         )
 
     return question
-
-
-def _build_answerer_data(question: QuestionAnswer) -> dict[str, Any] | None:
-    """답변자 정보를 구성합니다."""
-    if question.answerer:
-        return {
-            "id": question.answerer.id,
-            "nickname": question.answerer.nickname,
-            "profile_image_url": question.answerer.profile_image_url,
-        }
-    return None
 
 
 @router.post(
@@ -260,7 +245,9 @@ async def create_answer(
     # 관련 데이터 로드
     await session.refresh(question, ["questioner", "answerer"])
 
-    return _build_question_response(question, _build_answerer_data(question))
+    return QuestionWithAnswerResponse.from_question(
+        question, QuestionAnswerConverter.build_answerer_data(question)
+    )
 
 
 @router.patch(
@@ -307,7 +294,9 @@ async def update_answer(
     # 관련 데이터 로드
     await session.refresh(question, ["questioner", "answerer"])
 
-    return _build_question_response(question, _build_answerer_data(question))
+    return QuestionWithAnswerResponse.from_question(
+        question, QuestionAnswerConverter.build_answerer_data(question)
+    )
 
 
 @router.delete(
@@ -392,7 +381,9 @@ async def get_questions(
     questions_data = []
     for question in questions:
         questions_data.append(
-            _build_question_response(question, _build_answerer_data(question))
+            QuestionWithAnswerResponse.from_question(
+                question, QuestionAnswerConverter.build_answerer_data(question)
+            )
         )
 
     return QuestionListResponse(items=questions_data)

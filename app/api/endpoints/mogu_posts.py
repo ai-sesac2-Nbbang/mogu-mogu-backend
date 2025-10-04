@@ -11,9 +11,7 @@ from sqlalchemy.orm import selectinload
 
 from app.api import api_messages, deps
 from app.api.common import (
-    _build_mogu_post_response,
     _check_post_permissions,
-    _convert_questions_answers_to_dict,
     _get_mogu_post,
     _get_mogu_post_with_relations,
     _validate_post_status_for_deletion,
@@ -32,6 +30,7 @@ from app.schemas.responses import (
     MoguPostResponse,
     MoguPostWithParticipationPaginatedResponse,
     MoguPostWithParticipationResponse,
+    QuestionAnswerConverter,
 )
 
 router = APIRouter()
@@ -162,7 +161,7 @@ async def create_mogu_post(
     # 응답을 위해 관계 데이터 로드
     await session.refresh(mogu_post, ["images", "user"])
 
-    return _build_mogu_post_response(
+    return MoguPostResponse.from_mogu_post(
         mogu_post=mogu_post,
         my_participation=None,  # 생성자는 자동으로 참여하지 않음
         is_favorited=False,  # 새로 생성된 게시물은 찜하지 않음
@@ -522,9 +521,11 @@ async def get_mogu_post(
         is_favorited = await _check_favorite_status(post_id, current_user.id, session)
 
     # Q&A 데이터 변환
-    questions_answers = _convert_questions_answers_to_dict(mogu_post.questions_answers)
+    questions_answers = QuestionAnswerConverter.to_dict_list(
+        mogu_post.questions_answers
+    )
 
-    return _build_mogu_post_response(
+    return MoguPostResponse.from_mogu_post(
         mogu_post=mogu_post,
         my_participation=my_participation,
         is_favorited=is_favorited,
@@ -606,7 +607,7 @@ async def update_mogu_post(
     # 응답을 위해 관계 데이터 로드
     await session.refresh(mogu_post, ["images", "user"])
 
-    return _build_mogu_post_response(
+    return MoguPostResponse.from_mogu_post(
         mogu_post=mogu_post,
         my_participation=None,  # 수정 시에는 참여 상태를 다시 조회하지 않음
         is_favorited=False,  # 수정 시에는 찜하기 상태를 다시 조회하지 않음

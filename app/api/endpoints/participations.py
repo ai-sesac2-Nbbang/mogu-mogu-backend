@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.api import deps
-from app.api.common import _build_participation_response, _get_mogu_post
+from app.api.common import _get_mogu_post
 from app.core.database_session import get_async_session
 from app.enums import ParticipationStatusEnum, PostStatusEnum
 from app.models import Participation, User
@@ -116,7 +116,7 @@ async def participate_mogu_post(
             await session.commit()
             await session.refresh(existing_participation)
 
-            return _build_participation_response(existing_participation)
+            return ParticipationResponse.from_participation(existing_participation)
 
     # 새로운 참여 요청 생성
     participation = Participation(
@@ -130,7 +130,7 @@ async def participate_mogu_post(
     await session.commit()
     await session.refresh(participation)
 
-    return _build_participation_response(participation)
+    return ParticipationResponse.from_participation(participation)
 
 
 @router.delete(
@@ -325,4 +325,4 @@ async def update_participation_status(
     participation.decided_at = datetime.utcnow()
     await session.commit()
 
-    return _build_participation_response(participation)
+    return ParticipationResponse.from_participation(participation)

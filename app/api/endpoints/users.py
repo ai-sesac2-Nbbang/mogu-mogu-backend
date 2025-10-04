@@ -7,7 +7,6 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api import deps
-from app.api.common import _build_user_response
 from app.enums import UserStatusEnum
 from app.models import User, UserWishSpot
 from app.schemas.requests import UserUpdateRequest, WishSpotCreateRequest
@@ -77,7 +76,7 @@ async def read_current_user(
     current_user: User = Depends(deps.get_current_user),
 ) -> UserResponse:
     """현재 사용자 정보를 조회합니다."""
-    return _build_user_response(current_user)
+    return UserResponse.from_user(current_user)
 
 
 @router.patch("/me", response_model=UserResponse, description="Update current user")
@@ -104,7 +103,7 @@ async def update_current_user(
     await session.commit()
     await session.refresh(current_user)
 
-    return _build_user_response(current_user)
+    return UserResponse.from_user(current_user)
 
 
 @router.get(
