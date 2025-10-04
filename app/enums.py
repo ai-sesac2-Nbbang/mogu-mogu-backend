@@ -45,7 +45,7 @@ class MarketEnum(str, enum.Enum):
 
 
 class PostStatusEnum(str, enum.Enum):
-    """게시글 상태 (향후 사용)"""
+    """게시글 상태"""
 
     DRAFT = "draft"
     RECRUITING = "recruiting"
@@ -57,7 +57,7 @@ class PostStatusEnum(str, enum.Enum):
 
 
 class ParticipationStatusEnum(str, enum.Enum):
-    """참여 상태 (향후 사용)"""
+    """참여 상태"""
 
     APPLIED = "applied"
     ACCEPTED = "accepted"
