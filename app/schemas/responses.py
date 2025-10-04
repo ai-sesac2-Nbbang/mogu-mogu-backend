@@ -1,7 +1,11 @@
 from datetime import date, datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
+from geoalchemy2.shape import to_shape
 from pydantic import BaseModel, ConfigDict, EmailStr
+
+if TYPE_CHECKING:
+    from app.models import MoguPost, Participation, QuestionAnswer, User
 
 
 class BaseResponse(BaseModel):
@@ -49,6 +53,31 @@ class UserResponse(BaseResponse):
     created_at: datetime
     updated_at: datetime
 
+    @classmethod
+    def from_user(cls, user: "User") -> "UserResponse":
+        """User 모델로부터 UserResponse를 생성합니다."""
+        return cls(
+            user_id=user.id,
+            email=user.email,
+            kakao_id=user.kakao_id,
+            provider=user.provider,
+            nickname=user.nickname,
+            profile_image_url=user.profile_image_url,
+            name=user.name,
+            phone_number=user.phone_number,
+            birth_date=user.birth_date,
+            gender=user.gender,
+            interested_categories=user.interested_categories,
+            household_size=user.household_size,
+            wish_markets=user.wish_markets,
+            wish_times=user.wish_times,
+            status=user.status,
+            reported_count=user.reported_count,
+            onboarded_at=user.onboarded_at,
+            created_at=user.created_at,
+            updated_at=user.updated_at,
+        )
+
 
 class WishSpotResponse(BaseResponse):
     id: int
@@ -56,6 +85,10 @@ class WishSpotResponse(BaseResponse):
     latitude: float
     longitude: float
     created_at: datetime
+
+
+class WishSpotListResponse(BaseResponse):
+    items: list[WishSpotResponse]
 
 
 class KakaoUserResponse(BaseResponse):
@@ -158,6 +191,55 @@ class MoguPostResponse(BaseResponse):
     is_favorited: bool | None = None
     questions_answers: list[dict[str, Any]] | None = None
 
+    @classmethod
+    def from_mogu_post(
+        cls,
+        mogu_post: "MoguPost",
+        my_participation: dict[str, Any] | None = None,
+        is_favorited: bool = False,
+        questions_answers: list[dict[str, Any]] | None = None,
+    ) -> "MoguPostResponse":
+        """MoguPost 모델로부터 MoguPostResponse를 생성합니다."""
+        # Shapely를 사용한 위도/경도 추출
+        point = to_shape(mogu_post.mogu_spot)
+        latitude = point.y
+        longitude = point.x
+
+        return cls(
+            id=mogu_post.id,
+            user_id=mogu_post.user_id,
+            title=mogu_post.title,
+            description=mogu_post.description,
+            price=mogu_post.price,
+            category=mogu_post.category,
+            mogu_market=mogu_post.mogu_market,
+            mogu_spot={
+                "latitude": latitude,
+                "longitude": longitude,
+            },
+            mogu_datetime=mogu_post.mogu_datetime,
+            status=mogu_post.status,
+            target_count=mogu_post.target_count,
+            joined_count=mogu_post.joined_count,
+            created_at=mogu_post.created_at,
+            images=[
+                {
+                    "id": img.id,
+                    "image_url": img.image_url,
+                    "order": img.sort_order,
+                }
+                for img in mogu_post.images
+            ],
+            user={
+                "id": mogu_post.user.id,
+                "nickname": mogu_post.user.nickname,
+                "profile_image_url": mogu_post.user.profile_image_url,
+            },
+            my_participation=my_participation,
+            is_favorited=is_favorited,
+            questions_answers=questions_answers,
+        )
+
 
 class MoguPostListItemResponse(BaseResponse):
     """모구 게시물 목록용 최적화된 응답 스키마"""
@@ -186,12 +268,12 @@ class MoguPostWithParticipationResponse(MoguPostListItemResponse):
 
 
 class MoguPostListPaginatedResponse(BaseResponse):
-    posts: list[MoguPostListItemResponse]
+    items: list[MoguPostListItemResponse]
     pagination: dict[str, int]
 
 
 class MoguPostWithParticipationPaginatedResponse(BaseResponse):
-    posts: list[MoguPostWithParticipationResponse]
+    items: list[MoguPostWithParticipationResponse]
     pagination: dict[str, int]
 
 
@@ -203,6 +285,19 @@ class ParticipationResponse(BaseResponse):
     applied_at: datetime
     decided_at: datetime | None = None
 
+    @classmethod
+    def from_participation(
+        cls, participation: "Participation"
+    ) -> "ParticipationResponse":
+        """Participation 모델로부터 ParticipationResponse를 생성합니다."""
+        return cls(
+            user_id=participation.user_id,
+            mogu_post_id=participation.mogu_post_id,
+            status=participation.status,
+            applied_at=participation.applied_at,
+            decided_at=participation.decided_at,
+        )
+
 
 class ParticipationWithUserResponse(BaseResponse):
     user_id: str
@@ -213,12 +308,7 @@ class ParticipationWithUserResponse(BaseResponse):
 
 
 class ParticipationListResponse(BaseResponse):
-    participants: list[ParticipationWithUserResponse]
-
-
-class ParticipationMessageResponse(BaseResponse):
-    message: str
-    participation: ParticipationResponse | None = None
+    items: list[ParticipationWithUserResponse]
 
 
 # Q&A 관련 Response 스키마
@@ -242,6 +332,64 @@ class QuestionWithAnswerResponse(BaseResponse):
     questioner: dict[str, str | None]
     answerer: dict[str, str | None] | None = None
 
+    @classmethod
+    def from_question(
+        cls, question: "QuestionAnswer", answerer_data: dict[str, Any] | None = None
+    ) -> "QuestionWithAnswerResponse":
+        """QuestionAnswer 모델로부터 QuestionWithAnswerResponse를 생성합니다."""
+        return cls(
+            id=question.id,
+            question=question.question,
+            answer=question.answer,
+            is_private=question.is_private,
+            question_created_at=question.question_created_at,
+            answer_created_at=question.answer_created_at,
+            questioner={
+                "id": question.questioner.id,
+                "nickname": question.questioner.nickname,
+                "profile_image_url": question.questioner.profile_image_url,
+            },
+            answerer=answerer_data,
+        )
+
 
 class QuestionListResponse(BaseResponse):
-    questions: list[QuestionWithAnswerResponse]
+    items: list[QuestionWithAnswerResponse]
+
+
+# 유틸리티 클래스
+class QuestionAnswerConverter:
+    """Q&A 데이터 변환을 위한 유틸리티 클래스"""
+
+    @staticmethod
+    def to_dict_list(
+        questions_answers: list["QuestionAnswer"] | None,
+    ) -> list[dict[str, Any]] | None:
+        """Q&A 데이터를 딕셔너리 형태로 변환합니다."""
+        if not questions_answers:
+            return None
+
+        return [
+            {
+                "id": qa.id,
+                "questioner_id": qa.questioner_id,
+                "question": qa.question,
+                "answerer_id": qa.answerer_id,
+                "answer": qa.answer,
+                "is_private": qa.is_private,
+                "question_created_at": qa.question_created_at,
+                "answer_created_at": qa.answer_created_at,
+            }
+            for qa in questions_answers
+        ]
+
+    @staticmethod
+    def build_answerer_data(question: "QuestionAnswer") -> dict[str, Any] | None:
+        """답변자 정보를 구성합니다."""
+        if question.answerer:
+            return {
+                "id": question.answerer.id,
+                "nickname": question.answerer.nickname,
+                "profile_image_url": question.answerer.profile_image_url,
+            }
+        return None

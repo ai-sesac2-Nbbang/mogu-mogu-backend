@@ -1,13 +1,21 @@
 from datetime import datetime
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
-from geoalchemy2.shape import from_shape, to_shape
+from fastapi import status as http_status
+from geoalchemy2.shape import from_shape
 from shapely.geometry import Point
 from sqlalchemy import and_, desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.api import api_messages, deps
+from app.api.common import (
+    _check_post_permissions,
+    _get_mogu_post,
+    _get_mogu_post_with_relations,
+    _validate_post_status_for_deletion,
+)
 from app.core.database_session import get_async_session
 from app.enums import ParticipationStatusEnum, PostStatusEnum
 from app.models import MoguFavorite, MoguPost, MoguPostImage, Participation, User
@@ -22,9 +30,46 @@ from app.schemas.responses import (
     MoguPostResponse,
     MoguPostWithParticipationPaginatedResponse,
     MoguPostWithParticipationResponse,
+    QuestionAnswerConverter,
 )
 
 router = APIRouter()
+
+
+# 기타 헬퍼 함수들
+async def _get_user_participation_status(
+    post_id: str, user_id: str, session: AsyncSession
+) -> dict[str, Any] | None:
+    """사용자의 참여 상태를 조회합니다."""
+    participation_query = select(Participation).where(
+        and_(
+            Participation.mogu_post_id == post_id,
+            Participation.user_id == user_id,
+        )
+    )
+    participation_result = await session.execute(participation_query)
+    participation = participation_result.scalar_one_or_none()
+
+    if participation:
+        return {
+            "status": participation.status,
+            "joined_at": participation.applied_at,
+        }
+    return None
+
+
+async def _check_favorite_status(
+    post_id: str, user_id: str, session: AsyncSession
+) -> bool:
+    """사용자의 찜하기 상태를 확인합니다."""
+    favorite_query = select(MoguFavorite).where(
+        and_(
+            MoguFavorite.mogu_post_id == post_id,
+            MoguFavorite.user_id == user_id,
+        )
+    )
+    favorite_result = await session.execute(favorite_query)
+    return favorite_result.scalar_one_or_none() is not None
 
 
 async def _handle_post_status_change(
@@ -66,7 +111,12 @@ async def _handle_post_status_change(
                     participation.decided_at = datetime.utcnow()
 
 
-@router.post("/", response_model=MoguPostResponse, description="모구 게시물 생성")
+@router.post(
+    "/",
+    response_model=MoguPostResponse,
+    status_code=http_status.HTTP_201_CREATED,
+    description="모구 게시물 생성",
+)
 async def create_mogu_post(
     data: MoguPostCreateRequest,
     current_user: User = Depends(deps.get_current_user),
@@ -111,44 +161,8 @@ async def create_mogu_post(
     # 응답을 위해 관계 데이터 로드
     await session.refresh(mogu_post, ["images", "user"])
 
-    # Shapely를 사용한 위도/경도 추출
-    point = to_shape(mogu_post.mogu_spot)
-
-    return MoguPostResponse(
-        id=mogu_post.id,
-        user_id=mogu_post.user_id,
-        title=mogu_post.title,
-        description=mogu_post.description,
-        price=mogu_post.price,
-        category=mogu_post.category,
-        mogu_market=mogu_post.mogu_market,
-        mogu_spot={
-            "longitude": point.x,
-            "latitude": point.y,
-        },
-        mogu_datetime=mogu_post.mogu_datetime,
-        status=mogu_post.status,
-        target_count=mogu_post.target_count,
-        joined_count=mogu_post.joined_count,
-        created_at=mogu_post.created_at,
-        images=(
-            [
-                {
-                    "id": img.id,
-                    "image_url": img.image_url,
-                    "sort_order": img.sort_order,
-                    "is_thumbnail": img.is_thumbnail,
-                }
-                for img in mogu_post.images
-            ]
-            if mogu_post.images
-            else None
-        ),
-        user={
-            "id": mogu_post.user.id,
-            "nickname": mogu_post.user.nickname,
-            "profile_image_url": mogu_post.user.profile_image_url,
-        },
+    return MoguPostResponse.from_mogu_post(
+        mogu_post=mogu_post,
         my_participation=None,  # 생성자는 자동으로 참여하지 않음
         is_favorited=False,  # 새로 생성된 게시물은 찜하지 않음
     )
@@ -263,7 +277,7 @@ async def get_mogu_posts(
         )
 
     return MoguPostListPaginatedResponse(
-        posts=posts,
+        items=posts,
         pagination={
             "page": params.page,
             "limit": params.size,
@@ -301,7 +315,7 @@ async def get_my_posts(
             query = query.where(MoguPost.status == status_enum)
         except ValueError:
             raise HTTPException(
-                status_code=400,
+                status_code=http_status.HTTP_400_BAD_REQUEST,
                 detail=api_messages.INVALID_STATUS_VALUE,
             )
 
@@ -366,7 +380,7 @@ async def get_my_posts(
         )
 
     return MoguPostListPaginatedResponse(
-        posts=posts_list,
+        items=posts_list,
         pagination={
             "page": page,
             "limit": size,
@@ -405,7 +419,7 @@ async def get_my_participations(
             query = query.where(Participation.status == status_enum)
         except ValueError:
             raise HTTPException(
-                status_code=400,
+                status_code=http_status.HTTP_400_BAD_REQUEST,
                 detail="Invalid participation status value",
             )
 
@@ -474,7 +488,7 @@ async def get_my_participations(
         )
 
     return MoguPostWithParticipationPaginatedResponse(
-        posts=posts_list,
+        items=posts_list,
         pagination={
             "page": page,
             "limit": size,
@@ -494,115 +508,28 @@ async def get_mogu_post(
 ) -> MoguPostResponse:
     """모구 게시물을 상세 조회합니다."""
 
-    # 게시물 조회
-    query = (
-        select(MoguPost)
-        .options(
-            selectinload(MoguPost.images),
-            selectinload(MoguPost.user),
-            selectinload(MoguPost.questions_answers),
-        )
-        .where(MoguPost.id == post_id)
-    )
-
-    result = await session.execute(query)
-    mogu_post = result.scalar_one_or_none()
-
-    if not mogu_post:
-        raise HTTPException(
-            status_code=404,
-            detail=api_messages.MOGU_POST_NOT_FOUND,
-        )
-
-    # Shapely를 사용한 위도/경도 추출
-    point = to_shape(mogu_post.mogu_spot)
-    latitude = point.y
-    longitude = point.x
+    # 게시물 조회 (관계 데이터 포함)
+    mogu_post = await _get_mogu_post_with_relations(post_id, session)
 
     # 내 참여 상태 확인
     my_participation = None
-    if current_user:
-        participation_query = select(Participation).where(
-            and_(
-                Participation.mogu_post_id == post_id,
-                Participation.user_id == current_user.id,
-            )
-        )
-        participation_result = await session.execute(participation_query)
-        participation = participation_result.scalar_one_or_none()
-
-        if participation:
-            my_participation = {
-                "status": participation.status,
-                "joined_at": participation.applied_at,
-            }
-
-    # 찜하기 상태 확인
     is_favorited = False
     if current_user:
-        favorite_query = select(MoguFavorite).where(
-            and_(
-                MoguFavorite.mogu_post_id == post_id,
-                MoguFavorite.user_id == current_user.id,
-            )
+        my_participation = await _get_user_participation_status(
+            post_id, current_user.id, session
         )
-        favorite_result = await session.execute(favorite_query)
-        is_favorited = favorite_result.scalar_one_or_none() is not None
+        is_favorited = await _check_favorite_status(post_id, current_user.id, session)
 
-    return MoguPostResponse(
-        id=mogu_post.id,
-        user_id=mogu_post.user_id,
-        title=mogu_post.title,
-        description=mogu_post.description,
-        price=mogu_post.price,
-        category=mogu_post.category,
-        mogu_market=mogu_post.mogu_market,
-        mogu_spot={
-            "latitude": latitude,
-            "longitude": longitude,
-        },
-        mogu_datetime=mogu_post.mogu_datetime,
-        status=mogu_post.status,
-        target_count=mogu_post.target_count,
-        joined_count=mogu_post.joined_count,
-        created_at=mogu_post.created_at,
-        images=(
-            [
-                {
-                    "id": img.id,
-                    "image_url": img.image_url,
-                    "sort_order": img.sort_order,
-                    "is_thumbnail": img.is_thumbnail,
-                }
-                for img in mogu_post.images
-            ]
-            if mogu_post.images
-            else None
-        ),
-        user={
-            "id": mogu_post.user.id,
-            "nickname": mogu_post.user.nickname,
-            "profile_image_url": mogu_post.user.profile_image_url,
-        },
+    # Q&A 데이터 변환
+    questions_answers = QuestionAnswerConverter.to_dict_list(
+        mogu_post.questions_answers
+    )
+
+    return MoguPostResponse.from_mogu_post(
+        mogu_post=mogu_post,
         my_participation=my_participation,
         is_favorited=is_favorited,
-        questions_answers=(
-            [
-                {
-                    "id": qa.id,
-                    "questioner_id": qa.questioner_id,
-                    "question": qa.question,
-                    "answerer_id": qa.answerer_id,
-                    "answer": qa.answer,
-                    "is_private": qa.is_private,
-                    "question_created_at": qa.question_created_at,
-                    "answer_created_at": qa.answer_created_at,
-                }
-                for qa in mogu_post.questions_answers
-            ]
-            if mogu_post.questions_answers
-            else None
-        ),
+        questions_answers=questions_answers,
     )
 
 
@@ -618,32 +545,13 @@ async def update_mogu_post(
     """모구 게시물을 수정합니다."""
 
     # 게시물 조회
-    query = select(MoguPost).where(MoguPost.id == post_id)
-    result = await session.execute(query)
-    mogu_post = result.scalar_one_or_none()
-
-    if not mogu_post:
-        raise HTTPException(
-            status_code=404,
-            detail=api_messages.MOGU_POST_NOT_FOUND,
-        )
+    mogu_post = await _get_mogu_post(post_id, session)
 
     # 권한 확인 (작성자만 수정 가능)
-    if mogu_post.user_id != current_user.id:
-        raise HTTPException(
-            status_code=403,
-            detail=api_messages.MOGU_POST_UPDATE_FORBIDDEN,
-        )
+    await _check_post_permissions(mogu_post, current_user)
 
     # 수정 가능한 상태인지 확인
-    if mogu_post.status not in [
-        PostStatusEnum.RECRUITING,
-        PostStatusEnum.LOCKED,
-    ]:
-        raise HTTPException(
-            status_code=400,
-            detail=api_messages.MOGU_POST_UPDATE_NOT_ALLOWED,
-        )
+    await _validate_post_status_for_deletion(mogu_post)
 
     # 필드 업데이트
     update_data = data.model_dump(exclude_unset=True)
@@ -699,87 +607,34 @@ async def update_mogu_post(
     # 응답을 위해 관계 데이터 로드
     await session.refresh(mogu_post, ["images", "user"])
 
-    # Shapely를 사용한 위도/경도 추출
-    point = to_shape(mogu_post.mogu_spot)
-
-    return MoguPostResponse(
-        id=mogu_post.id,
-        user_id=mogu_post.user_id,
-        title=mogu_post.title,
-        description=mogu_post.description,
-        price=mogu_post.price,
-        category=mogu_post.category,
-        mogu_market=mogu_post.mogu_market,
-        mogu_spot={
-            "latitude": point.y,
-            "longitude": point.x,
-        },
-        mogu_datetime=mogu_post.mogu_datetime,
-        status=mogu_post.status,
-        target_count=mogu_post.target_count,
-        joined_count=mogu_post.joined_count,
-        created_at=mogu_post.created_at,
-        images=(
-            [
-                {
-                    "id": img.id,
-                    "image_url": img.image_url,
-                    "sort_order": img.sort_order,
-                    "is_thumbnail": img.is_thumbnail,
-                }
-                for img in mogu_post.images
-            ]
-            if mogu_post.images
-            else None
-        ),
-        user={
-            "id": mogu_post.user.id,
-            "nickname": mogu_post.user.nickname,
-            "profile_image_url": mogu_post.user.profile_image_url,
-        },
+    return MoguPostResponse.from_mogu_post(
+        mogu_post=mogu_post,
         my_participation=None,  # 수정 시에는 참여 상태를 다시 조회하지 않음
         is_favorited=False,  # 수정 시에는 찜하기 상태를 다시 조회하지 않음
     )
 
 
-@router.delete("/{post_id}", description="모구 게시물 삭제")
+@router.delete(
+    "/{post_id}",
+    status_code=http_status.HTTP_204_NO_CONTENT,
+    description="모구 게시물 삭제",
+)
 async def delete_mogu_post(
     post_id: str,
     current_user: User = Depends(deps.get_current_user),
     session: AsyncSession = Depends(get_async_session),
-) -> dict[str, str]:
+) -> None:
     """모구 게시물을 삭제합니다."""
 
     # 게시물 조회
-    query = select(MoguPost).where(MoguPost.id == post_id)
-    result = await session.execute(query)
-    mogu_post = result.scalar_one_or_none()
-
-    if not mogu_post:
-        raise HTTPException(
-            status_code=404,
-            detail=api_messages.MOGU_POST_NOT_FOUND,
-        )
+    mogu_post = await _get_mogu_post(post_id, session)
 
     # 권한 확인 (작성자만 삭제 가능)
-    if mogu_post.user_id != current_user.id:
-        raise HTTPException(
-            status_code=403,
-            detail=api_messages.MOGU_POST_DELETE_FORBIDDEN,
-        )
+    await _check_post_permissions(mogu_post, current_user)
 
     # 삭제 가능한 상태인지 확인
-    if mogu_post.status not in [
-        PostStatusEnum.RECRUITING,
-        PostStatusEnum.LOCKED,
-    ]:
-        raise HTTPException(
-            status_code=400,
-            detail=api_messages.MOGU_POST_DELETE_NOT_ALLOWED,
-        )
+    await _validate_post_status_for_deletion(mogu_post)
 
     # 게시물 삭제 (CASCADE로 관련 데이터도 함께 삭제됨)
     await session.delete(mogu_post)
     await session.commit()
-
-    return {"message": "모구 게시물이 성공적으로 삭제되었습니다."}

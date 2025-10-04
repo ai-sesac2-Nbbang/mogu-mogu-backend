@@ -1,13 +1,13 @@
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.api import api_messages, deps
+from app.api.common import _check_qa_activity_allowed, _get_mogu_post
 from app.core.database_session import get_async_session
-from app.enums import PostStatusEnum
 from app.models import MoguPost, QuestionAnswer, User
 from app.schemas.requests import (
     AnswerCreateRequest,
@@ -16,46 +16,13 @@ from app.schemas.requests import (
     QuestionUpdateRequest,
 )
 from app.schemas.responses import (
+    QuestionAnswerConverter,
     QuestionListResponse,
     QuestionResponse,
     QuestionWithAnswerResponse,
 )
 
 router = APIRouter()
-
-
-async def _get_mogu_post(
-    post_id: str,
-    session: AsyncSession,
-) -> MoguPost:
-    """모구 게시물을 조회합니다."""
-    query = select(MoguPost).where(MoguPost.id == post_id)
-    result = await session.execute(query)
-    mogu_post = result.scalar_one_or_none()
-
-    if not mogu_post:
-        raise HTTPException(
-            status_code=404,
-            detail=api_messages.MOGU_POST_NOT_FOUND,
-        )
-
-    return mogu_post
-
-
-async def _check_qa_activity_allowed(
-    mogu_post: MoguPost,
-    session: AsyncSession,
-) -> None:
-    """Q&A 활동이 허용되는 상태인지 확인합니다."""
-    if mogu_post.status in [
-        PostStatusEnum.DRAFT.value,
-        PostStatusEnum.CANCELED.value,
-        PostStatusEnum.COMPLETED.value,
-    ]:
-        raise HTTPException(
-            status_code=400,
-            detail="현재 Q&A 활동을 할 수 없는 상태입니다.",
-        )
 
 
 async def _get_question(
@@ -75,7 +42,7 @@ async def _get_question(
 
     if not question:
         raise HTTPException(
-            status_code=404,
+            status_code=status.HTTP_404_NOT_FOUND,
             detail="질문을 찾을 수 없습니다.",
         )
 
@@ -85,6 +52,7 @@ async def _get_question(
 @router.post(
     "/{post_id}/questions",
     response_model=QuestionResponse,
+    status_code=status.HTTP_201_CREATED,
     description="질문 작성",
 )
 async def create_question(
@@ -150,7 +118,7 @@ async def update_question(
     # 질문 작성자 권한 확인
     if question.questioner_id != current_user.id:
         raise HTTPException(
-            status_code=403,
+            status_code=status.HTTP_403_FORBIDDEN,
             detail="질문 작성자만 수정할 수 있습니다.",
         )
 
@@ -161,7 +129,7 @@ async def update_question(
     # 답변이 이미 달렸는지 확인
     if question.answer is not None:
         raise HTTPException(
-            status_code=400,
+            status_code=status.HTTP_400_BAD_REQUEST,
             detail="답변이 달린 질문은 수정할 수 없습니다.",
         )
 
@@ -193,7 +161,7 @@ async def update_question(
 
 @router.delete(
     "/{post_id}/questions/{question_id}",
-    status_code=204,
+    status_code=status.HTTP_204_NO_CONTENT,
     description="질문 삭제",
 )
 async def delete_question(
@@ -210,7 +178,7 @@ async def delete_question(
     # 질문 작성자 권한 확인
     if question.questioner_id != current_user.id:
         raise HTTPException(
-            status_code=403,
+            status_code=status.HTTP_403_FORBIDDEN,
             detail="질문 작성자만 삭제할 수 있습니다.",
         )
 
@@ -221,7 +189,7 @@ async def delete_question(
     # 답변이 이미 달렸는지 확인
     if question.answer is not None:
         raise HTTPException(
-            status_code=400,
+            status_code=status.HTTP_400_BAD_REQUEST,
             detail="답변이 달린 질문은 삭제할 수 없습니다.",
         )
 
@@ -233,6 +201,7 @@ async def delete_question(
 @router.post(
     "/{post_id}/questions/{question_id}/answer",
     response_model=QuestionWithAnswerResponse,
+    status_code=status.HTTP_201_CREATED,
     description="답변 작성 (모구장용)",
 )
 async def create_answer(
@@ -251,7 +220,7 @@ async def create_answer(
     # 모구장 권한 확인
     if mogu_post.user_id != current_user.id:
         raise HTTPException(
-            status_code=403,
+            status_code=status.HTTP_403_FORBIDDEN,
             detail="모구장만 답변을 작성할 수 있습니다.",
         )
 
@@ -261,7 +230,7 @@ async def create_answer(
     # 이미 답변이 있는지 확인
     if question.answer is not None:
         raise HTTPException(
-            status_code=400,
+            status_code=status.HTTP_400_BAD_REQUEST,
             detail="이미 답변이 작성된 질문입니다.",
         )
 
@@ -276,28 +245,8 @@ async def create_answer(
     # 관련 데이터 로드
     await session.refresh(question, ["questioner", "answerer"])
 
-    # 답변자 정보 구성
-    answerer_data = None
-    if question.answerer:
-        answerer_data = {
-            "id": question.answerer.id,
-            "nickname": question.answerer.nickname,
-            "profile_image_url": question.answerer.profile_image_url,
-        }
-
-    return QuestionWithAnswerResponse(
-        id=question.id,
-        question=question.question,
-        answer=question.answer,
-        is_private=question.is_private,
-        question_created_at=question.question_created_at,
-        answer_created_at=question.answer_created_at,
-        questioner={
-            "id": question.questioner.id,
-            "nickname": question.questioner.nickname,
-            "profile_image_url": question.questioner.profile_image_url,
-        },
-        answerer=answerer_data,
+    return QuestionWithAnswerResponse.from_question(
+        question, QuestionAnswerConverter.build_answerer_data(question)
     )
 
 
@@ -322,7 +271,7 @@ async def update_answer(
     # 모구장 권한 확인
     if mogu_post.user_id != current_user.id:
         raise HTTPException(
-            status_code=403,
+            status_code=status.HTTP_403_FORBIDDEN,
             detail="모구장만 답변을 수정할 수 있습니다.",
         )
 
@@ -332,7 +281,7 @@ async def update_answer(
     # 답변이 있는지 확인
     if question.answer is None:
         raise HTTPException(
-            status_code=400,
+            status_code=status.HTTP_400_BAD_REQUEST,
             detail="답변이 없는 질문입니다.",
         )
 
@@ -345,34 +294,14 @@ async def update_answer(
     # 관련 데이터 로드
     await session.refresh(question, ["questioner", "answerer"])
 
-    # 답변자 정보 구성
-    answerer_data = None
-    if question.answerer:
-        answerer_data = {
-            "id": question.answerer.id,
-            "nickname": question.answerer.nickname,
-            "profile_image_url": question.answerer.profile_image_url,
-        }
-
-    return QuestionWithAnswerResponse(
-        id=question.id,
-        question=question.question,
-        answer=question.answer,
-        is_private=question.is_private,
-        question_created_at=question.question_created_at,
-        answer_created_at=question.answer_created_at,
-        questioner={
-            "id": question.questioner.id,
-            "nickname": question.questioner.nickname,
-            "profile_image_url": question.questioner.profile_image_url,
-        },
-        answerer=answerer_data,
+    return QuestionWithAnswerResponse.from_question(
+        question, QuestionAnswerConverter.build_answerer_data(question)
     )
 
 
 @router.delete(
     "/{post_id}/questions/{question_id}/answer",
-    status_code=204,
+    status_code=status.HTTP_204_NO_CONTENT,
     description="답변 삭제 (모구장용)",
 )
 async def delete_answer(
@@ -390,7 +319,7 @@ async def delete_answer(
     # 모구장 권한 확인
     if mogu_post.user_id != current_user.id:
         raise HTTPException(
-            status_code=403,
+            status_code=status.HTTP_403_FORBIDDEN,
             detail="모구장만 답변을 삭제할 수 있습니다.",
         )
 
@@ -400,7 +329,7 @@ async def delete_answer(
     # 답변이 있는지 확인
     if question.answer is None:
         raise HTTPException(
-            status_code=400,
+            status_code=status.HTTP_400_BAD_REQUEST,
             detail="답변이 없는 질문입니다.",
         )
 
@@ -431,7 +360,7 @@ async def get_questions(
 
     if not mogu_post:
         raise HTTPException(
-            status_code=404,
+            status_code=status.HTTP_404_NOT_FOUND,
             detail=api_messages.MOGU_POST_NOT_FOUND,
         )
 
@@ -451,30 +380,10 @@ async def get_questions(
 
     questions_data = []
     for question in questions:
-        # 답변자 정보 구성
-        answerer_data = None
-        if question.answerer:
-            answerer_data = {
-                "id": question.answerer.id,
-                "nickname": question.answerer.nickname,
-                "profile_image_url": question.answerer.profile_image_url,
-            }
-
         questions_data.append(
-            QuestionWithAnswerResponse(
-                id=question.id,
-                question=question.question,
-                answer=question.answer,
-                is_private=question.is_private,
-                question_created_at=question.question_created_at,
-                answer_created_at=question.answer_created_at,
-                questioner={
-                    "id": question.questioner.id,
-                    "nickname": question.questioner.nickname,
-                    "profile_image_url": question.questioner.profile_image_url,
-                },
-                answerer=answerer_data,
+            QuestionWithAnswerResponse.from_question(
+                question, QuestionAnswerConverter.build_answerer_data(question)
             )
         )
 
-    return QuestionListResponse(questions=questions_data)
+    return QuestionListResponse(items=questions_data)

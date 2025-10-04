@@ -10,7 +10,7 @@ from app.api import deps
 from app.enums import UserStatusEnum
 from app.models import User, UserWishSpot
 from app.schemas.requests import UserUpdateRequest, WishSpotCreateRequest
-from app.schemas.responses import UserResponse, WishSpotResponse
+from app.schemas.responses import UserResponse, WishSpotListResponse, WishSpotResponse
 
 router = APIRouter()
 
@@ -18,31 +18,65 @@ router = APIRouter()
 MAX_WISH_SPOTS = 2
 
 
+# 공통 헬퍼 함수들
+
+
+def _check_onboarding_completion(user: User) -> None:
+    """온보딩 완료 여부를 확인하고 필요시 상태를 업데이트합니다."""
+    if user.status == UserStatusEnum.PENDING_ONBOARDING.value:
+        if all(
+            [
+                user.name,
+                user.phone_number,
+                user.gender,
+                user.household_size,
+            ]
+        ):
+            user.status = UserStatusEnum.ACTIVE.value
+            user.onboarded_at = datetime.utcnow()
+
+
+async def _get_user_wish_spots(
+    user_id: str, session: AsyncSession
+) -> list[UserWishSpot]:
+    """사용자의 관심 장소 목록을 조회합니다."""
+    result = await session.execute(
+        select(UserWishSpot)
+        .where(UserWishSpot.user_id == user_id)
+        .order_by(UserWishSpot.created_at)
+    )
+    spots = result.scalars().all()
+    return [spot for spot in spots]
+
+
+def _build_wish_spot_response(spot: UserWishSpot) -> WishSpotResponse:
+    """관심 장소 응답 객체를 생성합니다."""
+    point = to_shape(spot.location)
+    return WishSpotResponse(
+        id=spot.id,
+        label=spot.label,
+        longitude=point.x,  # 경도
+        latitude=point.y,  # 위도
+        created_at=spot.created_at,
+    )
+
+
+async def _validate_wish_spot_limit(user_id: str, session: AsyncSession) -> None:
+    """관심 장소 개수 제한을 검증합니다."""
+    existing_spots = await _get_user_wish_spots(user_id, session)
+    if len(existing_spots) >= MAX_WISH_SPOTS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"최대 {MAX_WISH_SPOTS}개의 관심 장소만 등록할 수 있습니다.",
+        )
+
+
 @router.get("/me", response_model=UserResponse, description="Get current user")
 async def read_current_user(
     current_user: User = Depends(deps.get_current_user),
 ) -> UserResponse:
-    return UserResponse(
-        user_id=current_user.id,
-        email=current_user.email,
-        kakao_id=current_user.kakao_id,
-        provider=current_user.provider,
-        nickname=current_user.nickname,
-        profile_image_url=current_user.profile_image_url,
-        name=current_user.name,
-        phone_number=current_user.phone_number,
-        birth_date=current_user.birth_date,
-        gender=current_user.gender,
-        interested_categories=current_user.interested_categories,
-        household_size=current_user.household_size,
-        wish_markets=current_user.wish_markets,
-        wish_times=current_user.wish_times,
-        status=current_user.status,
-        reported_count=current_user.reported_count,
-        onboarded_at=current_user.onboarded_at,
-        created_at=current_user.created_at,
-        updated_at=current_user.updated_at,
-    )
+    """현재 사용자 정보를 조회합니다."""
+    return UserResponse.from_user(current_user)
 
 
 @router.patch("/me", response_model=UserResponse, description="Update current user")
@@ -59,106 +93,49 @@ async def update_current_user(
     """
     # 제공된 필드만 업데이트
     update_data = data.model_dump(exclude_unset=True)
-
     for field, value in update_data.items():
         setattr(current_user, field, value)
 
-    # 온보딩 완료 체크: 필수 필드가 모두 채워졌는지 확인
-    if current_user.status == UserStatusEnum.PENDING_ONBOARDING.value:
-        if all(
-            [
-                current_user.name,
-                current_user.phone_number,
-                current_user.gender,
-                current_user.household_size,
-            ]
-        ):
-            current_user.status = UserStatusEnum.ACTIVE.value
-            current_user.onboarded_at = datetime.utcnow()
+    # 온보딩 완료 체크
+    _check_onboarding_completion(current_user)
 
     session.add(current_user)
     await session.commit()
     await session.refresh(current_user)
 
-    return UserResponse(
-        user_id=current_user.id,
-        email=current_user.email,
-        kakao_id=current_user.kakao_id,
-        provider=current_user.provider,
-        nickname=current_user.nickname,
-        profile_image_url=current_user.profile_image_url,
-        name=current_user.name,
-        phone_number=current_user.phone_number,
-        birth_date=current_user.birth_date,
-        gender=current_user.gender,
-        interested_categories=current_user.interested_categories,
-        household_size=current_user.household_size,
-        wish_markets=current_user.wish_markets,
-        wish_times=current_user.wish_times,
-        status=current_user.status,
-        reported_count=current_user.reported_count,
-        onboarded_at=current_user.onboarded_at,
-        created_at=current_user.created_at,
-        updated_at=current_user.updated_at,
-    )
+    return UserResponse.from_user(current_user)
 
 
 @router.get(
     "/me/wish-spots",
-    response_model=list[WishSpotResponse],
+    response_model=WishSpotListResponse,
     description="Get current user's wish spots",
 )
 async def get_wish_spots(
     current_user: User = Depends(deps.get_current_user),
     session: AsyncSession = Depends(deps.get_session),
-) -> list[WishSpotResponse]:
+) -> WishSpotListResponse:
     """현재 사용자의 관심 장소 목록 조회"""
-    result = await session.execute(
-        select(UserWishSpot)
-        .where(UserWishSpot.user_id == current_user.id)
-        .order_by(UserWishSpot.created_at)
+    spots = await _get_user_wish_spots(current_user.id, session)
+    return WishSpotListResponse(
+        items=[_build_wish_spot_response(spot) for spot in spots]
     )
-    spots = result.scalars().all()
-
-    # Geography를 위도/경도로 변환
-    response = []
-    for spot in spots:
-        point = to_shape(spot.location)
-        response.append(
-            WishSpotResponse(
-                id=spot.id,
-                label=spot.label,
-                longitude=point.x,  # 경도
-                latitude=point.y,  # 위도
-                created_at=spot.created_at,
-            )
-        )
-
-    return response
 
 
 @router.post(
     "/me/wish-spots",
     status_code=status.HTTP_201_CREATED,
+    response_model=WishSpotResponse,
     description="Add wish spot (max 2)",
 )
 async def create_wish_spot(
     data: WishSpotCreateRequest,
     current_user: User = Depends(deps.get_current_user),
     session: AsyncSession = Depends(deps.get_session),
-) -> dict[str, str]:
+) -> WishSpotResponse:
     """관심 장소 추가 (최대 2개)"""
-    # 기존 wish_spots 개수 확인
-    result = await session.execute(
-        select(UserWishSpot).where(UserWishSpot.user_id == current_user.id)
-    )
-    existing_spots = result.scalars().all()
-
-    if len(existing_spots) >= MAX_WISH_SPOTS:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"최대 {MAX_WISH_SPOTS}개의 관심 장소만 등록할 수 있습니다.",
-        )
+    # 관심 장소 개수 제한 검증
+    await _validate_wish_spot_limit(current_user.id, session)
 
     # PostGIS POINT 생성 (경도, 위도 순서!)
     point = Point(data.longitude, data.latitude)
@@ -171,8 +148,9 @@ async def create_wish_spot(
 
     session.add(wish_spot)
     await session.commit()
+    await session.refresh(wish_spot)
 
-    return {"message": "관심 장소가 추가되었습니다."}
+    return _build_wish_spot_response(wish_spot)
 
 
 @router.delete(
