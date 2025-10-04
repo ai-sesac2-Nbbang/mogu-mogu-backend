@@ -219,12 +219,6 @@ async def kakao_callback(
         )
 
 
-@router.post(
-    "/refresh-token",
-    response_model=AccessTokenResponse,
-    responses=REFRESH_TOKEN_RESPONSES,
-    description="OAuth2 compatible token, get an access token for future requests using refresh token",
-)
 async def _get_refresh_token(token_value: str, session: AsyncSession) -> RefreshToken:
     """리프레시 토큰을 조회하고 유효성을 검증합니다."""
     token = await session.scalar(
