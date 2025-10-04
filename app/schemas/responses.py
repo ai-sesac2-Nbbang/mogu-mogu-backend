@@ -58,6 +58,10 @@ class WishSpotResponse(BaseResponse):
     created_at: datetime
 
 
+class WishSpotListResponse(BaseResponse):
+    items: list[WishSpotResponse]
+
+
 class KakaoUserResponse(BaseResponse):
     kakao_id: int
     nickname: str | None = None
