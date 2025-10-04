@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -28,7 +28,7 @@ async def _get_mogu_post(post_id: str, session: AsyncSession) -> MoguPost:
 
     if not mogu_post:
         raise HTTPException(
-            status_code=404,
+            status_code=status.HTTP_404_NOT_FOUND,
             detail=api_messages.MOGU_POST_NOT_FOUND,
         )
 
@@ -50,7 +50,7 @@ async def _get_participation(
 
     if not participation:
         raise HTTPException(
-            status_code=404,
+            status_code=status.HTTP_404_NOT_FOUND,
             detail="참여 신청을 찾을 수 없습니다.",
         )
 
@@ -73,6 +73,7 @@ def _build_participation_response(
 @router.post(
     "/{post_id}/participate",
     response_model=ParticipationResponse,
+    status_code=status.HTTP_201_CREATED,
     description="참여 요청",
 )
 async def participate_mogu_post(
@@ -98,14 +99,14 @@ async def participate_mogu_post(
             mogu_post.status, "현재 참여할 수 없는 상태입니다."
         )
         raise HTTPException(
-            status_code=400,
+            status_code=status.HTTP_400_BAD_REQUEST,
             detail=message,
         )
 
     # 작성자는 참여할 수 없음
     if mogu_post.user_id == current_user.id:
         raise HTTPException(
-            status_code=400,
+            status_code=status.HTTP_400_BAD_REQUEST,
             detail="게시물 작성자는 참여할 수 없습니다.",
         )
 
@@ -125,7 +126,7 @@ async def participate_mogu_post(
             ParticipationStatusEnum.ACCEPTED,
         ]:
             raise HTTPException(
-                status_code=400,
+                status_code=status.HTTP_400_BAD_REQUEST,
                 detail="이미 참여 신청하거나 승인된 상태입니다.",
             )
         elif existing_participation.status in [
@@ -159,7 +160,7 @@ async def participate_mogu_post(
 
 @router.delete(
     "/{post_id}/participate",
-    status_code=204,
+    status_code=status.HTTP_204_NO_CONTENT,
     description="참여 취소",
 )
 async def cancel_participation(
@@ -181,7 +182,7 @@ async def cancel_participation(
         ParticipationStatusEnum.ACCEPTED,
     ]:
         raise HTTPException(
-            status_code=400,
+            status_code=status.HTTP_400_BAD_REQUEST,
             detail="취소할 수 없는 상태입니다.",
         )
 
@@ -214,7 +215,7 @@ async def get_participants(
     # 모구장 권한 확인
     if mogu_post.user_id != current_user.id:
         raise HTTPException(
-            status_code=403,
+            status_code=status.HTTP_403_FORBIDDEN,
             detail="모구장만 참여자 목록을 조회할 수 있습니다.",
         )
 
@@ -268,7 +269,7 @@ async def update_participation_status(
     # 모구장 권한 확인
     if mogu_post.user_id != current_user.id:
         raise HTTPException(
-            status_code=403,
+            status_code=status.HTTP_403_FORBIDDEN,
             detail="모구장만 참여 요청을 승인/거부할 수 있습니다.",
         )
 
@@ -281,7 +282,7 @@ async def update_participation_status(
         PostStatusEnum.COMPLETED,
     ]:
         raise HTTPException(
-            status_code=400,
+            status_code=status.HTTP_400_BAD_REQUEST,
             detail="현재 참여 상태를 관리할 수 없는 상태입니다.",
         )
 
@@ -297,7 +298,7 @@ async def update_participation_status(
 
     if not participation:
         raise HTTPException(
-            status_code=404,
+            status_code=status.HTTP_404_NOT_FOUND,
             detail="참여 신청을 찾을 수 없습니다.",
         )
 
@@ -314,7 +315,7 @@ async def update_participation_status(
 
     if participation.status not in allowed_status_changes.get(data.status, []):
         raise HTTPException(
-            status_code=400,
+            status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"현재 상태({participation.status})에서는 '{data.status}'로 변경할 수 없습니다.",
         )
 
@@ -323,7 +324,7 @@ async def update_participation_status(
         # 참여자 수 제한 검증
         if mogu_post.target_count and mogu_post.joined_count >= mogu_post.target_count:
             raise HTTPException(
-                status_code=400,
+                status_code=status.HTTP_400_BAD_REQUEST,
                 detail="모구 인원이 이미 가득 찼습니다.",
             )
 
@@ -342,7 +343,7 @@ async def update_participation_status(
         participation.status = ParticipationStatusEnum.FULFILLED
     else:
         raise HTTPException(
-            status_code=400,
+            status_code=status.HTTP_400_BAD_REQUEST,
             detail="올바르지 않은 상태입니다. 'accepted', 'rejected', 'no_show', 'fulfilled' 중 하나를 입력하세요.",
         )
 

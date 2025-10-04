@@ -3,6 +3,7 @@ from datetime import datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi import status as http_status
 from geoalchemy2.shape import from_shape, to_shape
 from shapely.geometry import Point
 from sqlalchemy import and_, desc, func, select
@@ -38,7 +39,7 @@ async def _get_mogu_post(post_id: str, session: AsyncSession) -> MoguPost:
 
     if not mogu_post:
         raise HTTPException(
-            status_code=404,
+            status_code=http_status.HTTP_404_NOT_FOUND,
             detail=api_messages.MOGU_POST_NOT_FOUND,
         )
 
@@ -64,7 +65,7 @@ async def _get_mogu_post_with_relations(
 
     if not mogu_post:
         raise HTTPException(
-            status_code=404,
+            status_code=http_status.HTTP_404_NOT_FOUND,
             detail=api_messages.MOGU_POST_NOT_FOUND,
         )
 
@@ -75,7 +76,7 @@ async def _check_post_permissions(mogu_post: MoguPost, current_user: User) -> No
     """게시물 권한을 확인합니다."""
     if mogu_post.user_id != current_user.id:
         raise HTTPException(
-            status_code=403,
+            status_code=http_status.HTTP_403_FORBIDDEN,
             detail=api_messages.MOGU_POST_DELETE_FORBIDDEN,
         )
 
@@ -87,7 +88,7 @@ async def _validate_post_status_for_deletion(mogu_post: MoguPost) -> None:
         PostStatusEnum.LOCKED,
     ]:
         raise HTTPException(
-            status_code=400,
+            status_code=http_status.HTTP_400_BAD_REQUEST,
             detail=api_messages.MOGU_POST_DELETE_NOT_ALLOWED,
         )
 
@@ -241,7 +242,12 @@ async def _handle_post_status_change(
                     participation.decided_at = datetime.utcnow()
 
 
-@router.post("/", response_model=MoguPostResponse, description="모구 게시물 생성")
+@router.post(
+    "/",
+    response_model=MoguPostResponse,
+    status_code=http_status.HTTP_201_CREATED,
+    description="모구 게시물 생성",
+)
 async def create_mogu_post(
     data: MoguPostCreateRequest,
     current_user: User = Depends(deps.get_current_user),
@@ -440,7 +446,7 @@ async def get_my_posts(
             query = query.where(MoguPost.status == status_enum)
         except ValueError:
             raise HTTPException(
-                status_code=400,
+                status_code=http_status.HTTP_400_BAD_REQUEST,
                 detail=api_messages.INVALID_STATUS_VALUE,
             )
 
@@ -544,7 +550,7 @@ async def get_my_participations(
             query = query.where(Participation.status == status_enum)
         except ValueError:
             raise HTTPException(
-                status_code=400,
+                status_code=http_status.HTTP_400_BAD_REQUEST,
                 detail="Invalid participation status value",
             )
 
@@ -737,7 +743,11 @@ async def update_mogu_post(
     )
 
 
-@router.delete("/{post_id}", status_code=204, description="모구 게시물 삭제")
+@router.delete(
+    "/{post_id}",
+    status_code=http_status.HTTP_204_NO_CONTENT,
+    description="모구 게시물 삭제",
+)
 async def delete_mogu_post(
     post_id: str,
     current_user: User = Depends(deps.get_current_user),

@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -36,7 +36,7 @@ async def _get_mogu_post(
 
     if not mogu_post:
         raise HTTPException(
-            status_code=404,
+            status_code=status.HTTP_404_NOT_FOUND,
             detail=api_messages.MOGU_POST_NOT_FOUND,
         )
 
@@ -54,7 +54,7 @@ async def _check_qa_activity_allowed(
         PostStatusEnum.COMPLETED.value,
     ]:
         raise HTTPException(
-            status_code=400,
+            status_code=status.HTTP_400_BAD_REQUEST,
             detail="현재 Q&A 활동을 할 수 없는 상태입니다.",
         )
 
@@ -76,7 +76,7 @@ async def _get_question(
 
     if not question:
         raise HTTPException(
-            status_code=404,
+            status_code=status.HTTP_404_NOT_FOUND,
             detail="질문을 찾을 수 없습니다.",
         )
 
@@ -117,6 +117,7 @@ def _build_question_response(
 @router.post(
     "/{post_id}/questions",
     response_model=QuestionResponse,
+    status_code=status.HTTP_201_CREATED,
     description="질문 작성",
 )
 async def create_question(
@@ -182,7 +183,7 @@ async def update_question(
     # 질문 작성자 권한 확인
     if question.questioner_id != current_user.id:
         raise HTTPException(
-            status_code=403,
+            status_code=status.HTTP_403_FORBIDDEN,
             detail="질문 작성자만 수정할 수 있습니다.",
         )
 
@@ -193,7 +194,7 @@ async def update_question(
     # 답변이 이미 달렸는지 확인
     if question.answer is not None:
         raise HTTPException(
-            status_code=400,
+            status_code=status.HTTP_400_BAD_REQUEST,
             detail="답변이 달린 질문은 수정할 수 없습니다.",
         )
 
@@ -225,7 +226,7 @@ async def update_question(
 
 @router.delete(
     "/{post_id}/questions/{question_id}",
-    status_code=204,
+    status_code=status.HTTP_204_NO_CONTENT,
     description="질문 삭제",
 )
 async def delete_question(
@@ -242,7 +243,7 @@ async def delete_question(
     # 질문 작성자 권한 확인
     if question.questioner_id != current_user.id:
         raise HTTPException(
-            status_code=403,
+            status_code=status.HTTP_403_FORBIDDEN,
             detail="질문 작성자만 삭제할 수 있습니다.",
         )
 
@@ -253,7 +254,7 @@ async def delete_question(
     # 답변이 이미 달렸는지 확인
     if question.answer is not None:
         raise HTTPException(
-            status_code=400,
+            status_code=status.HTTP_400_BAD_REQUEST,
             detail="답변이 달린 질문은 삭제할 수 없습니다.",
         )
 
@@ -265,6 +266,7 @@ async def delete_question(
 @router.post(
     "/{post_id}/questions/{question_id}/answer",
     response_model=QuestionWithAnswerResponse,
+    status_code=status.HTTP_201_CREATED,
     description="답변 작성 (모구장용)",
 )
 async def create_answer(
@@ -283,7 +285,7 @@ async def create_answer(
     # 모구장 권한 확인
     if mogu_post.user_id != current_user.id:
         raise HTTPException(
-            status_code=403,
+            status_code=status.HTTP_403_FORBIDDEN,
             detail="모구장만 답변을 작성할 수 있습니다.",
         )
 
@@ -293,7 +295,7 @@ async def create_answer(
     # 이미 답변이 있는지 확인
     if question.answer is not None:
         raise HTTPException(
-            status_code=400,
+            status_code=status.HTTP_400_BAD_REQUEST,
             detail="이미 답변이 작성된 질문입니다.",
         )
 
@@ -332,7 +334,7 @@ async def update_answer(
     # 모구장 권한 확인
     if mogu_post.user_id != current_user.id:
         raise HTTPException(
-            status_code=403,
+            status_code=status.HTTP_403_FORBIDDEN,
             detail="모구장만 답변을 수정할 수 있습니다.",
         )
 
@@ -342,7 +344,7 @@ async def update_answer(
     # 답변이 있는지 확인
     if question.answer is None:
         raise HTTPException(
-            status_code=400,
+            status_code=status.HTTP_400_BAD_REQUEST,
             detail="답변이 없는 질문입니다.",
         )
 
@@ -360,7 +362,7 @@ async def update_answer(
 
 @router.delete(
     "/{post_id}/questions/{question_id}/answer",
-    status_code=204,
+    status_code=status.HTTP_204_NO_CONTENT,
     description="답변 삭제 (모구장용)",
 )
 async def delete_answer(
@@ -378,7 +380,7 @@ async def delete_answer(
     # 모구장 권한 확인
     if mogu_post.user_id != current_user.id:
         raise HTTPException(
-            status_code=403,
+            status_code=status.HTTP_403_FORBIDDEN,
             detail="모구장만 답변을 삭제할 수 있습니다.",
         )
 
@@ -388,7 +390,7 @@ async def delete_answer(
     # 답변이 있는지 확인
     if question.answer is None:
         raise HTTPException(
-            status_code=400,
+            status_code=status.HTTP_400_BAD_REQUEST,
             detail="답변이 없는 질문입니다.",
         )
 
@@ -419,7 +421,7 @@ async def get_questions(
 
     if not mogu_post:
         raise HTTPException(
-            status_code=404,
+            status_code=status.HTTP_404_NOT_FOUND,
             detail=api_messages.MOGU_POST_NOT_FOUND,
         )
 
