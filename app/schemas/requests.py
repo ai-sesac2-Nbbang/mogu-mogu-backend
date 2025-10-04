@@ -168,6 +168,6 @@ class MoguPostListQueryParams(BaseRequest):
 
 # 참여 관련 Request 스키마
 class ParticipationStatusUpdateRequest(BaseRequest):
-    """참여 상태 업데이트 (승인/거부)"""
+    """참여 상태 업데이트 (승인/거부/노쇼/완료)"""
 
-    status: str  # "accepted" 또는 "rejected"
+    status: str  # "accepted", "rejected", "no_show", "fulfilled"

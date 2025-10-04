@@ -44,10 +44,20 @@ async def participate_mogu_post(
         )
 
     # 모집 가능한 상태인지 확인
-    if mogu_post.status != PostStatusEnum.RECRUITING:
+    if mogu_post.status != PostStatusEnum.RECRUITING.value:
+        status_messages = {
+            "locked": "모집이 마감되었습니다.",
+            "purchasing": "이미 구매 진행 중입니다.",
+            "distributing": "이미 분배 진행 중입니다.",
+            "completed": "이미 완료된 모구입니다.",
+            "canceled": "취소된 모구입니다.",
+        }
+        message = status_messages.get(
+            mogu_post.status, "현재 참여할 수 없는 상태입니다."
+        )
         raise HTTPException(
             status_code=400,
-            detail="현재 모집 중이 아닙니다.",
+            detail=message,
         )
 
     # 작성자는 참여할 수 없음
@@ -250,7 +260,7 @@ async def get_participants(
 @router.patch(
     "/{post_id}/participants/{user_id}",
     response_model=ParticipationMessageResponse,
-    description="참여 승인/거부 (모구장용)",
+    description="참여 상태 관리 (모구장용)",
 )
 async def update_participation_status(
     post_id: str,
@@ -259,7 +269,7 @@ async def update_participation_status(
     current_user: User = Depends(deps.get_current_user),
     session: AsyncSession = Depends(get_async_session),
 ) -> ParticipationMessageResponse:
-    """참여 요청을 승인하거나 거부합니다 (모구장만)."""
+    """참여 상태를 관리합니다 (모구장만)."""
 
     # 게시물 조회
     query = select(MoguPost).where(MoguPost.id == post_id)
@@ -279,6 +289,19 @@ async def update_participation_status(
             detail="모구장만 참여 요청을 승인/거부할 수 있습니다.",
         )
 
+    # 참여 상태 관리 가능한 상태인지 확인
+    if mogu_post.status not in [
+        PostStatusEnum.RECRUITING,
+        PostStatusEnum.LOCKED,
+        PostStatusEnum.PURCHASING,
+        PostStatusEnum.DISTRIBUTING,
+        PostStatusEnum.COMPLETED,
+    ]:
+        raise HTTPException(
+            status_code=400,
+            detail="현재 참여 상태를 관리할 수 없는 상태입니다.",
+        )
+
     # 참여 신청 조회
     participation_query = select(Participation).where(
         and_(
@@ -295,11 +318,21 @@ async def update_participation_status(
             detail="참여 신청을 찾을 수 없습니다.",
         )
 
-    # 승인/거부 가능한 상태인지 확인
-    if participation.status != ParticipationStatusEnum.APPLIED:
+    # 상태 변경 가능한 상태인지 확인
+    allowed_status_changes = {
+        "accepted": [ParticipationStatusEnum.APPLIED],
+        "rejected": [ParticipationStatusEnum.APPLIED],
+        "no_show": [ParticipationStatusEnum.FULFILLED],
+        "fulfilled": [
+            ParticipationStatusEnum.ACCEPTED,
+            ParticipationStatusEnum.NO_SHOW,
+        ],
+    }
+
+    if participation.status not in allowed_status_changes.get(data.status, []):
         raise HTTPException(
             status_code=400,
-            detail="승인/거부할 수 없는 상태입니다.",
+            detail=f"현재 상태({participation.status})에서는 '{data.status}'로 변경할 수 없습니다.",
         )
 
     # 상태 업데이트
@@ -320,10 +353,18 @@ async def update_participation_status(
     elif data.status == "rejected":
         participation.status = ParticipationStatusEnum.REJECTED
         message = "참여 요청이 거부되었습니다."
+
+    elif data.status == "no_show":
+        participation.status = ParticipationStatusEnum.NO_SHOW
+        message = "노쇼로 처리되었습니다."
+
+    elif data.status == "fulfilled":
+        participation.status = ParticipationStatusEnum.FULFILLED
+        message = "참여가 완료로 처리되었습니다."
     else:
         raise HTTPException(
             status_code=400,
-            detail="올바르지 않은 상태입니다. 'accepted' 또는 'rejected'를 입력하세요.",
+            detail="올바르지 않은 상태입니다. 'accepted', 'rejected', 'no_show', 'fulfilled' 중 하나를 입력하세요.",
         )
 
     participation.decided_at = datetime.utcnow()

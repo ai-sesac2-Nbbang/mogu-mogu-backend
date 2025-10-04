@@ -45,17 +45,24 @@ async def _handle_post_status_change(
         participants = participants_result.scalars().all()
 
         for participation in participants:
-            # ACCEPTED 상태의 참여자들만 처리
-            if participation.status == ParticipationStatusEnum.ACCEPTED:
-                if new_status == PostStatusEnum.CANCELED:
-                    # 게시물 취소 시: ACCEPTED → CANCELED
-                    participation.status = ParticipationStatusEnum.CANCELED
-                    participation.decided_at = datetime.utcnow()
-                    # joined_count 감소
+            if new_status == PostStatusEnum.CANCELED:
+                # 게시물 취소 시: 모든 참여자 → CANCELED
+                if participation.status == ParticipationStatusEnum.ACCEPTED:
+                    # joined_count 감소 (ACCEPTED 참여자만)
                     mogu_post.joined_count -= 1
-                elif new_status == PostStatusEnum.COMPLETED:
-                    # 게시물 완료 시: ACCEPTED → FULFILLED
+
+                participation.status = ParticipationStatusEnum.CANCELED
+                participation.decided_at = datetime.utcnow()
+
+            elif new_status == PostStatusEnum.COMPLETED:
+                # 게시물 완료 시: ACCEPTED → FULFILLED (기본), APPLIED → CANCELED
+                # 노쇼 처리는 별도 API에서 진행 (평가 시점 등)
+                if participation.status == ParticipationStatusEnum.ACCEPTED:
                     participation.status = ParticipationStatusEnum.FULFILLED
+                    participation.decided_at = datetime.utcnow()
+                elif participation.status == ParticipationStatusEnum.APPLIED:
+                    # 미처리 참여 요청은 취소 처리
+                    participation.status = ParticipationStatusEnum.CANCELED
                     participation.decided_at = datetime.utcnow()
 
 
