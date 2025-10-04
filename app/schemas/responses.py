@@ -190,12 +190,12 @@ class MoguPostWithParticipationResponse(MoguPostListItemResponse):
 
 
 class MoguPostListPaginatedResponse(BaseResponse):
-    posts: list[MoguPostListItemResponse]
+    items: list[MoguPostListItemResponse]
     pagination: dict[str, int]
 
 
 class MoguPostWithParticipationPaginatedResponse(BaseResponse):
-    posts: list[MoguPostWithParticipationResponse]
+    items: list[MoguPostWithParticipationResponse]
     pagination: dict[str, int]
 
 

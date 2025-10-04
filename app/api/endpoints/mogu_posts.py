@@ -402,7 +402,7 @@ async def get_mogu_posts(
         )
 
     return MoguPostListPaginatedResponse(
-        posts=posts,
+        items=posts,
         pagination={
             "page": params.page,
             "limit": params.size,
@@ -505,7 +505,7 @@ async def get_my_posts(
         )
 
     return MoguPostListPaginatedResponse(
-        posts=posts_list,
+        items=posts_list,
         pagination={
             "page": page,
             "limit": size,
@@ -613,7 +613,7 @@ async def get_my_participations(
         )
 
     return MoguPostWithParticipationPaginatedResponse(
-        posts=posts_list,
+        items=posts_list,
         pagination={
             "page": page,
             "limit": size,
