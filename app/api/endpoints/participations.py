@@ -20,6 +20,44 @@ from app.schemas.responses import (
 router = APIRouter()
 
 
+# 공통 헬퍼 함수들
+async def _get_mogu_post(post_id: str, session: AsyncSession) -> MoguPost:
+    """모구 게시물을 조회합니다."""
+    query = select(MoguPost).where(MoguPost.id == post_id)
+    result = await session.execute(query)
+    mogu_post = result.scalar_one_or_none()
+
+    if not mogu_post:
+        raise HTTPException(
+            status_code=404,
+            detail=api_messages.MOGU_POST_NOT_FOUND,
+        )
+
+    return mogu_post
+
+
+async def _get_participation(
+    post_id: str, user_id: str, session: AsyncSession
+) -> Participation:
+    """사용자의 참여 정보를 조회합니다."""
+    query = select(Participation).where(
+        and_(
+            Participation.mogu_post_id == post_id,
+            Participation.user_id == user_id,
+        )
+    )
+    result = await session.execute(query)
+    participation = result.scalar_one_or_none()
+
+    if not participation:
+        raise HTTPException(
+            status_code=404,
+            detail="참여 신청을 찾을 수 없습니다.",
+        )
+
+    return participation
+
+
 @router.post(
     "/{post_id}/participate",
     response_model=ParticipationMessageResponse,
@@ -33,15 +71,7 @@ async def participate_mogu_post(
     """모구 게시물에 참여 요청합니다."""
 
     # 게시물 조회
-    query = select(MoguPost).where(MoguPost.id == post_id)
-    result = await session.execute(query)
-    mogu_post = result.scalar_one_or_none()
-
-    if not mogu_post:
-        raise HTTPException(
-            status_code=404,
-            detail=api_messages.MOGU_POST_NOT_FOUND,
-        )
+    mogu_post = await _get_mogu_post(post_id, session)
 
     # 모집 가능한 상태인지 확인
     if mogu_post.status != PostStatusEnum.RECRUITING.value:
@@ -135,42 +165,21 @@ async def participate_mogu_post(
 
 @router.delete(
     "/{post_id}/participate",
-    response_model=ParticipationMessageResponse,
+    status_code=204,
     description="참여 취소",
 )
 async def cancel_participation(
     post_id: str,
     current_user: User = Depends(deps.get_current_user),
     session: AsyncSession = Depends(get_async_session),
-) -> ParticipationMessageResponse:
+) -> None:
     """모구 게시물 참여를 취소합니다."""
 
     # 모구 게시물 조회
-    mogu_post_query = select(MoguPost).where(MoguPost.id == post_id)
-    mogu_post_result = await session.execute(mogu_post_query)
-    mogu_post = mogu_post_result.scalar_one_or_none()
-
-    if not mogu_post:
-        raise HTTPException(
-            status_code=404,
-            detail=api_messages.MOGU_POST_NOT_FOUND,
-        )
+    mogu_post = await _get_mogu_post(post_id, session)
 
     # 참여 신청 조회
-    query = select(Participation).where(
-        and_(
-            Participation.mogu_post_id == post_id,
-            Participation.user_id == current_user.id,
-        )
-    )
-    result = await session.execute(query)
-    participation = result.scalar_one_or_none()
-
-    if not participation:
-        raise HTTPException(
-            status_code=404,
-            detail="참여 신청을 찾을 수 없습니다.",
-        )
+    participation = await _get_participation(post_id, current_user.id, session)
 
     # 취소 가능한 상태인지 확인
     if participation.status not in [
@@ -192,10 +201,6 @@ async def cancel_participation(
 
     await session.commit()
 
-    return ParticipationMessageResponse(
-        message="참여가 취소되었습니다.",
-    )
-
 
 @router.get(
     "/{post_id}/participants",
@@ -210,15 +215,7 @@ async def get_participants(
     """모구 게시물의 참여자 목록을 조회합니다 (모구장만)."""
 
     # 게시물 조회
-    query = select(MoguPost).where(MoguPost.id == post_id)
-    result = await session.execute(query)
-    mogu_post = result.scalar_one_or_none()
-
-    if not mogu_post:
-        raise HTTPException(
-            status_code=404,
-            detail=api_messages.MOGU_POST_NOT_FOUND,
-        )
+    mogu_post = await _get_mogu_post(post_id, session)
 
     # 모구장 권한 확인
     if mogu_post.user_id != current_user.id:
@@ -272,15 +269,7 @@ async def update_participation_status(
     """참여 상태를 관리합니다 (모구장만)."""
 
     # 게시물 조회
-    query = select(MoguPost).where(MoguPost.id == post_id)
-    result = await session.execute(query)
-    mogu_post = result.scalar_one_or_none()
-
-    if not mogu_post:
-        raise HTTPException(
-            status_code=404,
-            detail=api_messages.MOGU_POST_NOT_FOUND,
-        )
+    mogu_post = await _get_mogu_post(post_id, session)
 
     # 모구장 권한 확인
     if mogu_post.user_id != current_user.id:
