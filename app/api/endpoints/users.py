@@ -131,16 +131,16 @@ async def update_current_user(
 
 @router.get(
     "/me/wish-spots",
-    response_model=list[WishSpotResponse],
+    response_model=dict[str, list[WishSpotResponse]],
     description="Get current user's wish spots",
 )
 async def get_wish_spots(
     current_user: User = Depends(deps.get_current_user),
     session: AsyncSession = Depends(deps.get_session),
-) -> list[WishSpotResponse]:
+) -> dict[str, list[WishSpotResponse]]:
     """현재 사용자의 관심 장소 목록 조회"""
     spots = await _get_user_wish_spots(current_user.id, session)
-    return [_build_wish_spot_response(spot) for spot in spots]
+    return {"items": [_build_wish_spot_response(spot) for spot in spots]}
 
 
 @router.post(
