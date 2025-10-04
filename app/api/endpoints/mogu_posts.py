@@ -15,8 +15,8 @@ from app.schemas.requests import (
     MoguPostUpdateRequest,
 )
 from app.schemas.responses import (
+    MoguPostListItemResponse,
     MoguPostListPaginatedResponse,
-    MoguPostListResponse,
     MoguPostResponse,
 )
 
@@ -123,10 +123,9 @@ async def get_mogu_posts(
 ) -> MoguPostListPaginatedResponse:
     """모구 게시물 목록을 조회합니다."""
 
-    # 기본 쿼리
+    # 기본 쿼리 - 썸네일 이미지만 로드
     query = select(MoguPost).options(
         selectinload(MoguPost.images),
-        selectinload(MoguPost.user),
     )
 
     # 필터 적용
@@ -137,26 +136,19 @@ async def get_mogu_posts(
     if params.status:
         query = query.where(MoguPost.status == params.status)
 
-    # 거리 기반 필터링 (PostGIS 사용)
-    if params.latitude is not None and params.longitude is not None:
-        query = query.where(
-            func.ST_DWithin(
-                MoguPost.mogu_spot,
-                func.ST_SetSRID(
-                    func.ST_MakePoint(params.longitude, params.latitude), 4326
-                ),
-                params.radius * 1000,  # km를 m로 변환
-            )
+    # 거리 기반 필터링 (PostGIS 사용) - 이제 필수 파라미터
+    query = query.where(
+        func.ST_DWithin(
+            MoguPost.mogu_spot,
+            func.ST_SetSRID(func.ST_MakePoint(params.longitude, params.latitude), 4326),
+            params.radius * 1000,  # km를 m로 변환
         )
+    )
 
     # 정렬 적용
     if params.sort == "recent":
         query = query.order_by(desc(MoguPost.created_at))
-    elif (
-        params.sort == "distance"
-        and params.latitude is not None
-        and params.longitude is not None
-    ):
+    elif params.sort == "distance":
         # 거리순 정렬 (PostGIS 사용)
         query = query.order_by(
             func.ST_Distance(
@@ -184,89 +176,57 @@ async def get_mogu_posts(
     mogu_posts = result.scalars().all()
 
     # 응답 데이터 구성
-    items = []
+    posts = []
     for post in mogu_posts:
-        # Shapely를 사용한 위도/경도 추출
-        point = to_shape(post.mogu_spot)
-        latitude = point.y
-        longitude = point.x
-        # 내 참여 상태 확인
-        my_participation = None
-        if current_user:
-            participation_query = select(Participation).where(
-                and_(
-                    Participation.mogu_post_id == post.id,
-                    Participation.user_id == current_user.id,
-                )
-            )
-            participation_result = await session.execute(participation_query)
-            participation = participation_result.scalar_one_or_none()
+        # 찜하기 개수 조회
+        favorite_count_query = (
+            select(func.count())
+            .select_from(MoguFavorite)
+            .where(MoguFavorite.mogu_post_id == post.id)
+        )
+        favorite_count_result = await session.execute(favorite_count_query)
+        favorite_count = favorite_count_result.scalar() or 0
 
-            if participation:
-                my_participation = {
-                    "status": participation.status,
-                    "joined_at": participation.applied_at,
-                }
+        # 썸네일 이미지 추출
+        thumbnail_image = None
+        if post.images:
+            # 썸네일 이미지 찾기
+            thumbnail_img = next((img for img in post.images if img.is_thumbnail), None)
+            if thumbnail_img:
+                thumbnail_image = thumbnail_img.image_url
+            else:
+                # 썸네일이 없으면 첫 번째 이미지 사용
+                thumbnail_image = post.images[0].image_url
 
-        # 찜하기 상태 확인
-        is_favorited = False
-        if current_user:
-            favorite_query = select(MoguFavorite).where(
-                and_(
-                    MoguFavorite.mogu_post_id == post.id,
-                    MoguFavorite.user_id == current_user.id,
-                )
-            )
-            favorite_result = await session.execute(favorite_query)
-            is_favorited = favorite_result.scalar_one_or_none() is not None
-
-        items.append(
-            MoguPostListResponse(
+        posts.append(
+            MoguPostListItemResponse(
                 id=post.id,
-                user_id=post.user_id,
                 title=post.title,
-                description=post.description,
                 price=post.price,
                 category=post.category,
                 mogu_market=post.mogu_market,
-                mogu_spot={
-                    "latitude": latitude,
-                    "longitude": longitude,
-                },
                 mogu_datetime=post.mogu_datetime,
-                status=post.status,
-                target_count=post.target_count,
+                status=(
+                    post.status.value
+                    if hasattr(post.status, "value")
+                    else str(post.status)
+                ),
+                target_count=post.target_count or 0,
                 joined_count=post.joined_count,
                 created_at=post.created_at,
-                images=(
-                    [
-                        {
-                            "id": img.id,
-                            "image_url": img.image_url,
-                            "sort_order": img.sort_order,
-                            "is_thumbnail": img.is_thumbnail,
-                        }
-                        for img in post.images
-                    ]
-                    if post.images
-                    else None
-                ),
-                user={
-                    "id": post.user.id,
-                    "nickname": post.user.nickname,
-                    "profile_image_url": post.user.profile_image_url,
-                },
-                my_participation=my_participation,
-                is_favorited=is_favorited,
+                thumbnail_image=thumbnail_image,
+                favorite_count=favorite_count,
             )
         )
 
     return MoguPostListPaginatedResponse(
-        items=items,
-        total=total,
-        page=params.page,
-        size=params.size,
-        has_next=offset + params.size < total,
+        posts=posts,
+        pagination={
+            "page": params.page,
+            "limit": params.size,
+            "total": total,
+            "total_pages": (total + params.size - 1) // params.size,
+        },
     )
 
 
@@ -319,53 +279,57 @@ async def get_my_posts(
     posts = result.scalars().all()
 
     # 응답 데이터 구성
-    items = []
+    posts_list = []
     for post in posts:
-        # PostGIS 좌표 추출
-        point = to_shape(post.mogu_spot)
-        latitude = point.y
-        longitude = point.x
+        # 찜하기 개수 조회
+        favorite_count_query = (
+            select(func.count())
+            .select_from(MoguFavorite)
+            .where(MoguFavorite.mogu_post_id == post.id)
+        )
+        favorite_count_result = await session.execute(favorite_count_query)
+        favorite_count = favorite_count_result.scalar() or 0
 
-        items.append(
-            MoguPostListResponse(
+        # 썸네일 이미지 추출
+        thumbnail_image = None
+        if post.images:
+            # 썸네일 이미지 찾기
+            thumbnail_img = next((img for img in post.images if img.is_thumbnail), None)
+            if thumbnail_img:
+                thumbnail_image = thumbnail_img.image_url
+            else:
+                # 썸네일이 없으면 첫 번째 이미지 사용
+                thumbnail_image = post.images[0].image_url
+
+        posts_list.append(
+            MoguPostListItemResponse(
                 id=post.id,
-                user_id=post.user_id,
                 title=post.title,
-                description=post.description,
                 price=post.price,
                 category=post.category,
                 mogu_market=post.mogu_market,
-                mogu_spot={"latitude": latitude, "longitude": longitude},
                 mogu_datetime=post.mogu_datetime,
-                status=post.status,
-                target_count=post.target_count,
+                status=(
+                    post.status.value
+                    if hasattr(post.status, "value")
+                    else str(post.status)
+                ),
+                target_count=post.target_count or 0,
                 joined_count=post.joined_count,
                 created_at=post.created_at,
-                images=(
-                    [
-                        {
-                            "id": img.id,
-                            "image_url": img.image_url,
-                            "sort_order": img.sort_order,
-                            "is_thumbnail": img.is_thumbnail,
-                        }
-                        for img in post.images
-                    ]
-                    if post.images
-                    else None
-                ),
-                user={"user_id": current_user.id, "nickname": current_user.nickname},
-                my_participation=None,  # 내가 작성한 게시물이므로 참여 정보 없음
-                is_favorited=False,  # 내가 작성한 게시물이므로 찜하기 정보 없음
+                thumbnail_image=thumbnail_image,
+                favorite_count=favorite_count,
             )
         )
 
     return MoguPostListPaginatedResponse(
-        items=items,
-        total=total,
-        page=page,
-        size=size,
-        has_next=(page * size) < total,
+        posts=posts_list,
+        pagination={
+            "page": page,
+            "limit": size,
+            "total": total,
+            "total_pages": (total + size - 1) // size,
+        },
     )
 
 
@@ -388,7 +352,7 @@ async def get_my_participations(
         select(MoguPost, Participation)
         .join(Participation, MoguPost.id == Participation.mogu_post_id)
         .where(Participation.user_id == current_user.id)
-        .options(selectinload(MoguPost.images), selectinload(MoguPost.user))
+        .options(selectinload(MoguPost.images))
     )
 
     # 상태 필터 적용
@@ -419,56 +383,57 @@ async def get_my_participations(
     rows = result.all()
 
     # 응답 데이터 구성
-    items = []
+    posts_list = []
     for post, participation in rows:
-        # PostGIS 좌표 추출
-        point = to_shape(post.mogu_spot)
-        latitude = point.y
-        longitude = point.x
+        # 찜하기 개수 조회
+        favorite_count_query = (
+            select(func.count())
+            .select_from(MoguFavorite)
+            .where(MoguFavorite.mogu_post_id == post.id)
+        )
+        favorite_count_result = await session.execute(favorite_count_query)
+        favorite_count = favorite_count_result.scalar() or 0
 
-        items.append(
-            MoguPostListResponse(
+        # 썸네일 이미지 추출
+        thumbnail_image = None
+        if post.images:
+            # 썸네일 이미지 찾기
+            thumbnail_img = next((img for img in post.images if img.is_thumbnail), None)
+            if thumbnail_img:
+                thumbnail_image = thumbnail_img.image_url
+            else:
+                # 썸네일이 없으면 첫 번째 이미지 사용
+                thumbnail_image = post.images[0].image_url
+
+        posts_list.append(
+            MoguPostListItemResponse(
                 id=post.id,
-                user_id=post.user_id,
                 title=post.title,
-                description=post.description,
                 price=post.price,
                 category=post.category,
                 mogu_market=post.mogu_market,
-                mogu_spot={"latitude": latitude, "longitude": longitude},
                 mogu_datetime=post.mogu_datetime,
-                status=post.status,
-                target_count=post.target_count,
+                status=(
+                    post.status.value
+                    if hasattr(post.status, "value")
+                    else str(post.status)
+                ),
+                target_count=post.target_count or 0,
                 joined_count=post.joined_count,
                 created_at=post.created_at,
-                images=(
-                    [
-                        {
-                            "id": img.id,
-                            "image_url": img.image_url,
-                            "sort_order": img.sort_order,
-                            "is_thumbnail": img.is_thumbnail,
-                        }
-                        for img in post.images
-                    ]
-                    if post.images
-                    else None
-                ),
-                user={"user_id": post.user.id, "nickname": post.user.nickname},
-                my_participation={
-                    "status": participation.status,
-                    "applied_at": participation.applied_at,
-                },
-                is_favorited=False,  # 찜하기 정보는 별도 조회 필요
+                thumbnail_image=thumbnail_image,
+                favorite_count=favorite_count,
             )
         )
 
     return MoguPostListPaginatedResponse(
-        items=items,
-        total=total,
-        page=page,
-        size=size,
-        has_next=(page * size) < total,
+        posts=posts_list,
+        pagination={
+            "page": page,
+            "limit": size,
+            "total": total,
+            "total_pages": (total + size - 1) // size,
+        },
     )
 
 
@@ -488,6 +453,7 @@ async def get_mogu_post(
         .options(
             selectinload(MoguPost.images),
             selectinload(MoguPost.user),
+            selectinload(MoguPost.questions_answers),
         )
         .where(MoguPost.id == post_id)
     )
@@ -573,6 +539,23 @@ async def get_mogu_post(
         },
         my_participation=my_participation,
         is_favorited=is_favorited,
+        questions_answers=(
+            [
+                {
+                    "id": qa.id,
+                    "questioner_id": qa.questioner_id,
+                    "question": qa.question,
+                    "answerer_id": qa.answerer_id,
+                    "answer": qa.answer,
+                    "is_private": qa.is_private,
+                    "question_created_at": qa.question_created_at,
+                    "answer_created_at": qa.answer_created_at,
+                }
+                for qa in mogu_post.questions_answers
+            ]
+            if mogu_post.questions_answers
+            else None
+        ),
     )
 
 

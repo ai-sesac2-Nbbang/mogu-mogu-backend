@@ -159,7 +159,7 @@ class MoguPostListQueryParams(BaseRequest):
     sort: str = "ai_recommended"
     category: str | None = None
     mogu_market: str | None = None
-    status: str | None = None
-    latitude: float | None = None
-    longitude: float | None = None
+    status: str | None = "recruiting"  # 기본값은 recruiting, None이면 모든 상태 조회
+    latitude: float  # 필수 파라미터로 변경
+    longitude: float  # 필수 파라미터로 변경
     radius: float = 3.0

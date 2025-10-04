@@ -127,6 +127,17 @@ class MoguPostParticipationResponse(BaseResponse):
     joined_at: datetime | None = None
 
 
+class QuestionAnswerResponse(BaseResponse):
+    id: str
+    questioner_id: str
+    question: str
+    answerer_id: str | None = None
+    answer: str | None = None
+    is_private: bool
+    question_created_at: datetime
+    answer_created_at: datetime | None = None
+
+
 class MoguPostResponse(BaseResponse):
     id: str
     user_id: str
@@ -145,31 +156,26 @@ class MoguPostResponse(BaseResponse):
     user: dict[str, str | None]
     my_participation: dict[str, Any] | None = None
     is_favorited: bool | None = None
+    questions_answers: list[dict[str, Any]] | None = None
 
 
-class MoguPostListResponse(BaseResponse):
+class MoguPostListItemResponse(BaseResponse):
+    """모구 게시물 목록용 최적화된 응답 스키마"""
+
     id: str
-    user_id: str
     title: str
-    description: str | None = None
     price: int
     category: str
     mogu_market: str
-    mogu_spot: dict[str, float]
     mogu_datetime: datetime
     status: str
-    target_count: int | None = None
+    target_count: int
     joined_count: int
     created_at: datetime
-    images: list[dict[str, Any]] | None = None
-    user: dict[str, str | None]
-    my_participation: dict[str, Any] | None = None
-    is_favorited: bool | None = None
+    thumbnail_image: str | None = None
+    favorite_count: int  # 찜하기 개수
 
 
 class MoguPostListPaginatedResponse(BaseResponse):
-    items: list[MoguPostListResponse]
-    total: int
-    page: int
-    size: int
-    has_next: bool
+    posts: list[MoguPostListItemResponse]
+    pagination: dict[str, int]
