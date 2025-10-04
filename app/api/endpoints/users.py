@@ -7,6 +7,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api import deps
+from app.api.common import _build_user_response
 from app.enums import UserStatusEnum
 from app.models import User, UserWishSpot
 from app.schemas.requests import UserUpdateRequest, WishSpotCreateRequest
@@ -19,29 +20,6 @@ MAX_WISH_SPOTS = 2
 
 
 # 공통 헬퍼 함수들
-def _build_user_response(user: User) -> UserResponse:
-    """사용자 응답 객체를 생성합니다."""
-    return UserResponse(
-        user_id=user.id,
-        email=user.email,
-        kakao_id=user.kakao_id,
-        provider=user.provider,
-        nickname=user.nickname,
-        profile_image_url=user.profile_image_url,
-        name=user.name,
-        phone_number=user.phone_number,
-        birth_date=user.birth_date,
-        gender=user.gender,
-        interested_categories=user.interested_categories,
-        household_size=user.household_size,
-        wish_markets=user.wish_markets,
-        wish_times=user.wish_times,
-        status=user.status,
-        reported_count=user.reported_count,
-        onboarded_at=user.onboarded_at,
-        created_at=user.created_at,
-        updated_at=user.updated_at,
-    )
 
 
 def _check_onboarding_completion(user: User) -> None:

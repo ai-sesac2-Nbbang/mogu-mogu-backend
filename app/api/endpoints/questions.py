@@ -7,8 +7,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.api import api_messages, deps
+from app.api.common import (
+    _build_question_response,
+    _check_qa_activity_allowed,
+    _get_mogu_post,
+)
 from app.core.database_session import get_async_session
-from app.enums import PostStatusEnum
 from app.models import MoguPost, QuestionAnswer, User
 from app.schemas.requests import (
     AnswerCreateRequest,
@@ -23,40 +27,6 @@ from app.schemas.responses import (
 )
 
 router = APIRouter()
-
-
-async def _get_mogu_post(
-    post_id: str,
-    session: AsyncSession,
-) -> MoguPost:
-    """모구 게시물을 조회합니다."""
-    query = select(MoguPost).where(MoguPost.id == post_id)
-    result = await session.execute(query)
-    mogu_post = result.scalar_one_or_none()
-
-    if not mogu_post:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=api_messages.MOGU_POST_NOT_FOUND,
-        )
-
-    return mogu_post
-
-
-async def _check_qa_activity_allowed(
-    mogu_post: MoguPost,
-    session: AsyncSession,
-) -> None:
-    """Q&A 활동이 허용되는 상태인지 확인합니다."""
-    if mogu_post.status in [
-        PostStatusEnum.DRAFT.value,
-        PostStatusEnum.CANCELED.value,
-        PostStatusEnum.COMPLETED.value,
-    ]:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="현재 Q&A 활동을 할 수 없는 상태입니다.",
-        )
 
 
 async def _get_question(
@@ -92,26 +62,6 @@ def _build_answerer_data(question: QuestionAnswer) -> dict[str, Any] | None:
             "profile_image_url": question.answerer.profile_image_url,
         }
     return None
-
-
-def _build_question_response(
-    question: QuestionAnswer, answerer_data: dict[str, Any] | None = None
-) -> QuestionWithAnswerResponse:
-    """Q&A 응답 객체를 생성합니다."""
-    return QuestionWithAnswerResponse(
-        id=question.id,
-        question=question.question,
-        answer=question.answer,
-        is_private=question.is_private,
-        question_created_at=question.question_created_at,
-        answer_created_at=question.answer_created_at,
-        questioner={
-            "id": question.questioner.id,
-            "nickname": question.questioner.nickname,
-            "profile_image_url": question.questioner.profile_image_url,
-        },
-        answerer=answerer_data,
-    )
 
 
 @router.post(

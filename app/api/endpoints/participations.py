@@ -5,10 +5,11 @@ from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.api import api_messages, deps
+from app.api import deps
+from app.api.common import _build_participation_response, _get_mogu_post
 from app.core.database_session import get_async_session
 from app.enums import ParticipationStatusEnum, PostStatusEnum
-from app.models import MoguPost, Participation, User
+from app.models import Participation, User
 from app.schemas.requests import ParticipationStatusUpdateRequest
 from app.schemas.responses import (
     ParticipationListResponse,
@@ -20,19 +21,6 @@ router = APIRouter()
 
 
 # 공통 헬퍼 함수들
-async def _get_mogu_post(post_id: str, session: AsyncSession) -> MoguPost:
-    """모구 게시물을 조회합니다."""
-    query = select(MoguPost).where(MoguPost.id == post_id)
-    result = await session.execute(query)
-    mogu_post = result.scalar_one_or_none()
-
-    if not mogu_post:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=api_messages.MOGU_POST_NOT_FOUND,
-        )
-
-    return mogu_post
 
 
 async def _get_participation(
@@ -55,19 +43,6 @@ async def _get_participation(
         )
 
     return participation
-
-
-def _build_participation_response(
-    participation: Participation,
-) -> ParticipationResponse:
-    """참여 정보 응답 객체를 생성합니다."""
-    return ParticipationResponse(
-        user_id=participation.user_id,
-        mogu_post_id=participation.mogu_post_id,
-        status=participation.status,
-        applied_at=participation.applied_at,
-        decided_at=participation.decided_at,
-    )
 
 
 @router.post(
