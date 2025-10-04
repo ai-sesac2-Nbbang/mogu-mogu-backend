@@ -1,7 +1,7 @@
 from fastapi import APIRouter
 
 from app.api import api_messages
-from app.api.endpoints import auth, mogu_posts, participations, users
+from app.api.endpoints import auth, mogu_posts, participations, questions, users
 
 auth_router = APIRouter()
 auth_router.include_router(auth.router, prefix="/auth", tags=["auth"])
@@ -36,3 +36,4 @@ api_router.include_router(mogu_posts.router, prefix="/mogu-posts", tags=["mogu-p
 api_router.include_router(
     participations.router, prefix="/mogu-posts", tags=["participations"]
 )
+api_router.include_router(questions.router, prefix="/mogu-posts", tags=["questions"])

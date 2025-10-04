@@ -219,3 +219,29 @@ class ParticipationListResponse(BaseResponse):
 class ParticipationMessageResponse(BaseResponse):
     message: str
     participation: ParticipationResponse | None = None
+
+
+# Q&A 관련 Response 스키마
+class QuestionResponse(BaseResponse):
+    id: str
+    mogu_post_id: str
+    questioner_id: str
+    question: str
+    is_private: bool
+    question_created_at: datetime
+    questioner: dict[str, str | None]
+
+
+class QuestionWithAnswerResponse(BaseResponse):
+    id: str
+    question: str
+    answer: str | None = None
+    is_private: bool
+    question_created_at: datetime
+    answer_created_at: datetime | None = None
+    questioner: dict[str, str | None]
+    answerer: dict[str, str | None] | None = None
+
+
+class QuestionListResponse(BaseResponse):
+    questions: list[QuestionWithAnswerResponse]
