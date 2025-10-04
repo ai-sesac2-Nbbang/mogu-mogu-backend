@@ -134,6 +134,7 @@ class MoguPostUpdateRequest(BaseRequest):
     mogu_spot: MoguSpotRequest | None = None
     mogu_datetime: datetime | None = None
     target_count: int | None = None
+    status: str | None = None  # PostStatusEnum 값
     images: list[MoguPostImageRequest] | None = None
 
     @field_validator("target_count")
@@ -163,3 +164,10 @@ class MoguPostListQueryParams(BaseRequest):
     latitude: float  # 필수 파라미터로 변경
     longitude: float  # 필수 파라미터로 변경
     radius: float = 3.0
+
+
+# 참여 관련 Request 스키마
+class ParticipationStatusUpdateRequest(BaseRequest):
+    """참여 상태 업데이트 (승인/거부/노쇼/완료)"""
+
+    status: str  # "accepted", "rejected", "no_show", "fulfilled"

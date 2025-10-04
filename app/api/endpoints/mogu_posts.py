@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from fastapi import APIRouter, Depends, HTTPException
 from geoalchemy2.shape import from_shape, to_shape
 from shapely.geometry import Point
@@ -18,9 +20,50 @@ from app.schemas.responses import (
     MoguPostListItemResponse,
     MoguPostListPaginatedResponse,
     MoguPostResponse,
+    MoguPostWithParticipationPaginatedResponse,
+    MoguPostWithParticipationResponse,
 )
 
 router = APIRouter()
+
+
+async def _handle_post_status_change(
+    mogu_post: MoguPost,
+    original_status: PostStatusEnum,
+    new_status: PostStatusEnum,
+    session: AsyncSession,
+) -> None:
+    """모구 게시물 상태 변경 시 참여자들의 상태를 적절히 처리합니다."""
+
+    # 게시물이 취소되거나 완료된 경우 참여자 상태 처리
+    if new_status in [PostStatusEnum.CANCELED, PostStatusEnum.COMPLETED]:
+        # 모든 참여자 조회
+        participants_query = select(Participation).where(
+            Participation.mogu_post_id == mogu_post.id
+        )
+        participants_result = await session.execute(participants_query)
+        participants = participants_result.scalars().all()
+
+        for participation in participants:
+            if new_status == PostStatusEnum.CANCELED:
+                # 게시물 취소 시: 모든 참여자 → CANCELED
+                if participation.status == ParticipationStatusEnum.ACCEPTED:
+                    # joined_count 감소 (ACCEPTED 참여자만)
+                    mogu_post.joined_count -= 1
+
+                participation.status = ParticipationStatusEnum.CANCELED
+                participation.decided_at = datetime.utcnow()
+
+            elif new_status == PostStatusEnum.COMPLETED:
+                # 게시물 완료 시: ACCEPTED → FULFILLED (기본), APPLIED → CANCELED
+                # 노쇼 처리는 별도 API에서 진행 (평가 시점 등)
+                if participation.status == ParticipationStatusEnum.ACCEPTED:
+                    participation.status = ParticipationStatusEnum.FULFILLED
+                    participation.decided_at = datetime.utcnow()
+                elif participation.status == ParticipationStatusEnum.APPLIED:
+                    # 미처리 참여 요청은 취소 처리
+                    participation.status = ParticipationStatusEnum.CANCELED
+                    participation.decided_at = datetime.utcnow()
 
 
 @router.post("/", response_model=MoguPostResponse, description="모구 게시물 생성")
@@ -335,7 +378,7 @@ async def get_my_posts(
 
 @router.get(
     "/my-participations",
-    response_model=MoguPostListPaginatedResponse,
+    response_model=MoguPostWithParticipationPaginatedResponse,
     description="내가 참여한 게시물 목록",
 )
 async def get_my_participations(
@@ -344,7 +387,7 @@ async def get_my_participations(
     size: int = 20,
     current_user: User = Depends(deps.get_current_user),
     session: AsyncSession = Depends(get_async_session),
-) -> MoguPostListPaginatedResponse:
+) -> MoguPostWithParticipationPaginatedResponse:
     """내가 참여한 모구 게시물 목록을 조회합니다."""
 
     # 기본 쿼리 구성 (참여 테이블과 조인)
@@ -383,7 +426,7 @@ async def get_my_participations(
     rows = result.all()
 
     # 응답 데이터 구성
-    posts_list = []
+    posts_list: list[MoguPostWithParticipationResponse] = []
     for post, participation in rows:
         # 찜하기 개수 조회
         favorite_count_query = (
@@ -406,7 +449,7 @@ async def get_my_participations(
                 thumbnail_image = post.images[0].image_url
 
         posts_list.append(
-            MoguPostListItemResponse(
+            MoguPostWithParticipationResponse(
                 id=post.id,
                 title=post.title,
                 price=post.price,
@@ -423,10 +466,14 @@ async def get_my_participations(
                 created_at=post.created_at,
                 thumbnail_image=thumbnail_image,
                 favorite_count=favorite_count,
+                # 참여 상태 정보
+                my_participation_status=participation.status,
+                my_participation_applied_at=participation.applied_at,
+                my_participation_decided_at=participation.decided_at,
             )
         )
 
-    return MoguPostListPaginatedResponse(
+    return MoguPostWithParticipationPaginatedResponse(
         posts=posts_list,
         pagination={
             "page": page,
@@ -607,9 +654,21 @@ async def update_mogu_post(
             Point(mogu_spot["longitude"], mogu_spot["latitude"]), srid=4326
         )
 
+    # 상태 변경 전 원래 상태 저장
+    original_status = mogu_post.status
+
     for field, value in update_data.items():
         if field != "images" and hasattr(mogu_post, field):
             setattr(mogu_post, field, value)
+
+    # 모구 게시물 상태가 변경된 경우 참여자 상태 처리
+    if "status" in update_data and original_status != mogu_post.status:
+        await _handle_post_status_change(
+            mogu_post,
+            PostStatusEnum(original_status),
+            PostStatusEnum(mogu_post.status),
+            session,
+        )
 
     # 이미지 업데이트 (기존 이미지 삭제 후 새로 추가)
     if "images" in update_data:
