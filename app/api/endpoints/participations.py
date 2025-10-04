@@ -12,7 +12,6 @@ from app.models import MoguPost, Participation, User
 from app.schemas.requests import ParticipationStatusUpdateRequest
 from app.schemas.responses import (
     ParticipationListResponse,
-    ParticipationMessageResponse,
     ParticipationResponse,
     ParticipationWithUserResponse,
 )
@@ -73,14 +72,14 @@ def _build_participation_response(
 
 @router.post(
     "/{post_id}/participate",
-    response_model=ParticipationMessageResponse,
+    response_model=ParticipationResponse,
     description="참여 요청",
 )
 async def participate_mogu_post(
     post_id: str,
     current_user: User = Depends(deps.get_current_user),
     session: AsyncSession = Depends(get_async_session),
-) -> ParticipationMessageResponse:
+) -> ParticipationResponse:
     """모구 게시물에 참여 요청합니다."""
 
     # 게시물 조회
@@ -141,10 +140,7 @@ async def participate_mogu_post(
             await session.commit()
             await session.refresh(existing_participation)
 
-            return ParticipationMessageResponse(
-                message="참여 요청이 완료되었습니다.",
-                participation=_build_participation_response(existing_participation),
-            )
+            return _build_participation_response(existing_participation)
 
     # 새로운 참여 요청 생성
     participation = Participation(
@@ -158,10 +154,7 @@ async def participate_mogu_post(
     await session.commit()
     await session.refresh(participation)
 
-    return ParticipationMessageResponse(
-        message="참여 요청이 완료되었습니다.",
-        participation=_build_participation_response(participation),
-    )
+    return _build_participation_response(participation)
 
 
 @router.delete(
@@ -257,7 +250,7 @@ async def get_participants(
 
 @router.patch(
     "/{post_id}/participants/{user_id}",
-    response_model=ParticipationMessageResponse,
+    response_model=ParticipationResponse,
     description="참여 상태 관리 (모구장용)",
 )
 async def update_participation_status(
@@ -266,7 +259,7 @@ async def update_participation_status(
     data: ParticipationStatusUpdateRequest,
     current_user: User = Depends(deps.get_current_user),
     session: AsyncSession = Depends(get_async_session),
-) -> ParticipationMessageResponse:
+) -> ParticipationResponse:
     """참여 상태를 관리합니다 (모구장만)."""
 
     # 게시물 조회
@@ -335,22 +328,18 @@ async def update_participation_status(
             )
 
         participation.status = ParticipationStatusEnum.ACCEPTED
-        message = "참여 요청이 승인되었습니다."
 
         # 모구 게시물의 joined_count 증가
         mogu_post.joined_count += 1
 
     elif data.status == "rejected":
         participation.status = ParticipationStatusEnum.REJECTED
-        message = "참여 요청이 거부되었습니다."
 
     elif data.status == "no_show":
         participation.status = ParticipationStatusEnum.NO_SHOW
-        message = "노쇼로 처리되었습니다."
 
     elif data.status == "fulfilled":
         participation.status = ParticipationStatusEnum.FULFILLED
-        message = "참여가 완료로 처리되었습니다."
     else:
         raise HTTPException(
             status_code=400,
@@ -360,7 +349,4 @@ async def update_participation_status(
     participation.decided_at = datetime.utcnow()
     await session.commit()
 
-    return ParticipationMessageResponse(
-        message=message,
-        participation=_build_participation_response(participation),
-    )
+    return _build_participation_response(participation)

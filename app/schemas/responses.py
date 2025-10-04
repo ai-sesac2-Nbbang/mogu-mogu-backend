@@ -220,11 +220,6 @@ class ParticipationListResponse(BaseResponse):
     participants: list[ParticipationWithUserResponse]
 
 
-class ParticipationMessageResponse(BaseResponse):
-    message: str
-    participation: ParticipationResponse | None = None
-
-
 # Q&A 관련 Response 스키마
 class QuestionResponse(BaseResponse):
     id: str
