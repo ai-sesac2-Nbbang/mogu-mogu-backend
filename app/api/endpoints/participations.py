@@ -58,6 +58,19 @@ async def _get_participation(
     return participation
 
 
+def _build_participation_response(
+    participation: Participation,
+) -> ParticipationResponse:
+    """참여 정보 응답 객체를 생성합니다."""
+    return ParticipationResponse(
+        user_id=participation.user_id,
+        mogu_post_id=participation.mogu_post_id,
+        status=participation.status,
+        applied_at=participation.applied_at,
+        decided_at=participation.decided_at,
+    )
+
+
 @router.post(
     "/{post_id}/participate",
     response_model=ParticipationMessageResponse,
@@ -130,13 +143,7 @@ async def participate_mogu_post(
 
             return ParticipationMessageResponse(
                 message="참여 요청이 완료되었습니다.",
-                participation=ParticipationResponse(
-                    user_id=existing_participation.user_id,
-                    mogu_post_id=existing_participation.mogu_post_id,
-                    status=existing_participation.status,
-                    applied_at=existing_participation.applied_at,
-                    decided_at=existing_participation.decided_at,
-                ),
+                participation=_build_participation_response(existing_participation),
             )
 
     # 새로운 참여 요청 생성
@@ -153,13 +160,7 @@ async def participate_mogu_post(
 
     return ParticipationMessageResponse(
         message="참여 요청이 완료되었습니다.",
-        participation=ParticipationResponse(
-            user_id=participation.user_id,
-            mogu_post_id=participation.mogu_post_id,
-            status=participation.status,
-            applied_at=participation.applied_at,
-            decided_at=participation.decided_at,
-        ),
+        participation=_build_participation_response(participation),
     )
 
 
@@ -361,11 +362,5 @@ async def update_participation_status(
 
     return ParticipationMessageResponse(
         message=message,
-        participation=ParticipationResponse(
-            user_id=participation.user_id,
-            mogu_post_id=participation.mogu_post_id,
-            status=participation.status,
-            applied_at=participation.applied_at,
-            decided_at=participation.decided_at,
-        ),
+        participation=_build_participation_response(participation),
     )
