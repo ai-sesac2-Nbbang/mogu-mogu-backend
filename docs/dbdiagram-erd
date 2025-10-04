@@ -45,22 +45,22 @@ Enum user_status_enum {
 }
 
 Enum post_status_enum {
-  draft
-  recruiting
-  locked
-  purchasing
-  distributing
-  completed
-  canceled
+  draft         // 임시 저장 (아직 게시되지 않음)
+  recruiting    // 모집중 (참여자 모집 중)
+  locked        // 잠금 (모집 완료, 거래 시작 전)
+  purchasing    // 구매중 (실제 구매 진행 중)
+  distributing   // 분배중 (구매 완료 후 분배 진행 중)
+  completed     // 완료
+  canceled      // 취소
 }
 
 Enum participation_status_enum {
-  applied
-  accepted
-  rejected
-  canceled
-  no_show
-  fulfilled
+  applied    // 신청
+  accepted   // 승인
+  rejected   // 거절
+  canceled   // 취소
+  no_show    // 불참
+  fulfilled  // 완료
 }
 
 Enum rating_keyword_type_enum {
