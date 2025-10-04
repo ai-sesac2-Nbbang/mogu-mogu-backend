@@ -27,6 +27,43 @@ from app.schemas.responses import (
 router = APIRouter()
 
 
+# 공통 헬퍼 함수들
+async def _get_mogu_post(post_id: str, session: AsyncSession) -> MoguPost:
+    """모구 게시물을 조회합니다."""
+    query = select(MoguPost).where(MoguPost.id == post_id)
+    result = await session.execute(query)
+    mogu_post = result.scalar_one_or_none()
+
+    if not mogu_post:
+        raise HTTPException(
+            status_code=404,
+            detail=api_messages.MOGU_POST_NOT_FOUND,
+        )
+
+    return mogu_post
+
+
+async def _check_post_permissions(mogu_post: MoguPost, current_user: User) -> None:
+    """게시물 권한을 확인합니다."""
+    if mogu_post.user_id != current_user.id:
+        raise HTTPException(
+            status_code=403,
+            detail=api_messages.MOGU_POST_DELETE_FORBIDDEN,
+        )
+
+
+async def _validate_post_status_for_deletion(mogu_post: MoguPost) -> None:
+    """게시물 삭제 가능 상태를 검증합니다."""
+    if mogu_post.status not in [
+        PostStatusEnum.RECRUITING,
+        PostStatusEnum.LOCKED,
+    ]:
+        raise HTTPException(
+            status_code=400,
+            detail=api_messages.MOGU_POST_DELETE_NOT_ALLOWED,
+        )
+
+
 async def _handle_post_status_change(
     mogu_post: MoguPost,
     original_status: PostStatusEnum,
@@ -618,32 +655,13 @@ async def update_mogu_post(
     """모구 게시물을 수정합니다."""
 
     # 게시물 조회
-    query = select(MoguPost).where(MoguPost.id == post_id)
-    result = await session.execute(query)
-    mogu_post = result.scalar_one_or_none()
-
-    if not mogu_post:
-        raise HTTPException(
-            status_code=404,
-            detail=api_messages.MOGU_POST_NOT_FOUND,
-        )
+    mogu_post = await _get_mogu_post(post_id, session)
 
     # 권한 확인 (작성자만 수정 가능)
-    if mogu_post.user_id != current_user.id:
-        raise HTTPException(
-            status_code=403,
-            detail=api_messages.MOGU_POST_UPDATE_FORBIDDEN,
-        )
+    await _check_post_permissions(mogu_post, current_user)
 
     # 수정 가능한 상태인지 확인
-    if mogu_post.status not in [
-        PostStatusEnum.RECRUITING,
-        PostStatusEnum.LOCKED,
-    ]:
-        raise HTTPException(
-            status_code=400,
-            detail=api_messages.MOGU_POST_UPDATE_NOT_ALLOWED,
-        )
+    await _validate_post_status_for_deletion(mogu_post)
 
     # 필드 업데이트
     update_data = data.model_dump(exclude_unset=True)
@@ -742,44 +760,23 @@ async def update_mogu_post(
     )
 
 
-@router.delete("/{post_id}", description="모구 게시물 삭제")
+@router.delete("/{post_id}", status_code=204, description="모구 게시물 삭제")
 async def delete_mogu_post(
     post_id: str,
     current_user: User = Depends(deps.get_current_user),
     session: AsyncSession = Depends(get_async_session),
-) -> dict[str, str]:
+) -> None:
     """모구 게시물을 삭제합니다."""
 
     # 게시물 조회
-    query = select(MoguPost).where(MoguPost.id == post_id)
-    result = await session.execute(query)
-    mogu_post = result.scalar_one_or_none()
-
-    if not mogu_post:
-        raise HTTPException(
-            status_code=404,
-            detail=api_messages.MOGU_POST_NOT_FOUND,
-        )
+    mogu_post = await _get_mogu_post(post_id, session)
 
     # 권한 확인 (작성자만 삭제 가능)
-    if mogu_post.user_id != current_user.id:
-        raise HTTPException(
-            status_code=403,
-            detail=api_messages.MOGU_POST_DELETE_FORBIDDEN,
-        )
+    await _check_post_permissions(mogu_post, current_user)
 
     # 삭제 가능한 상태인지 확인
-    if mogu_post.status not in [
-        PostStatusEnum.RECRUITING,
-        PostStatusEnum.LOCKED,
-    ]:
-        raise HTTPException(
-            status_code=400,
-            detail=api_messages.MOGU_POST_DELETE_NOT_ALLOWED,
-        )
+    await _validate_post_status_for_deletion(mogu_post)
 
     # 게시물 삭제 (CASCADE로 관련 데이터도 함께 삭제됨)
     await session.delete(mogu_post)
     await session.commit()
-
-    return {"message": "모구 게시물이 성공적으로 삭제되었습니다."}
