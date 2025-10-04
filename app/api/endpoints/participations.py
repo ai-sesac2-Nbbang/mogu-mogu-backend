@@ -245,7 +245,7 @@ async def get_participants(
             )
         )
 
-    return ParticipationListResponse(participants=participants_data)
+    return ParticipationListResponse(items=participants_data)
 
 
 @router.patch(

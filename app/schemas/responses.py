@@ -217,7 +217,7 @@ class ParticipationWithUserResponse(BaseResponse):
 
 
 class ParticipationListResponse(BaseResponse):
-    participants: list[ParticipationWithUserResponse]
+    items: list[ParticipationWithUserResponse]
 
 
 # Q&A 관련 Response 스키마
