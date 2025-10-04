@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import and_, select
@@ -80,6 +81,37 @@ async def _get_question(
         )
 
     return question
+
+
+def _build_answerer_data(question: QuestionAnswer) -> dict[str, Any] | None:
+    """답변자 정보를 구성합니다."""
+    if question.answerer:
+        return {
+            "id": question.answerer.id,
+            "nickname": question.answerer.nickname,
+            "profile_image_url": question.answerer.profile_image_url,
+        }
+    return None
+
+
+def _build_question_response(
+    question: QuestionAnswer, answerer_data: dict[str, Any] | None = None
+) -> QuestionWithAnswerResponse:
+    """Q&A 응답 객체를 생성합니다."""
+    return QuestionWithAnswerResponse(
+        id=question.id,
+        question=question.question,
+        answer=question.answer,
+        is_private=question.is_private,
+        question_created_at=question.question_created_at,
+        answer_created_at=question.answer_created_at,
+        questioner={
+            "id": question.questioner.id,
+            "nickname": question.questioner.nickname,
+            "profile_image_url": question.questioner.profile_image_url,
+        },
+        answerer=answerer_data,
+    )
 
 
 @router.post(
@@ -276,29 +308,7 @@ async def create_answer(
     # 관련 데이터 로드
     await session.refresh(question, ["questioner", "answerer"])
 
-    # 답변자 정보 구성
-    answerer_data = None
-    if question.answerer:
-        answerer_data = {
-            "id": question.answerer.id,
-            "nickname": question.answerer.nickname,
-            "profile_image_url": question.answerer.profile_image_url,
-        }
-
-    return QuestionWithAnswerResponse(
-        id=question.id,
-        question=question.question,
-        answer=question.answer,
-        is_private=question.is_private,
-        question_created_at=question.question_created_at,
-        answer_created_at=question.answer_created_at,
-        questioner={
-            "id": question.questioner.id,
-            "nickname": question.questioner.nickname,
-            "profile_image_url": question.questioner.profile_image_url,
-        },
-        answerer=answerer_data,
-    )
+    return _build_question_response(question, _build_answerer_data(question))
 
 
 @router.patch(
@@ -345,29 +355,7 @@ async def update_answer(
     # 관련 데이터 로드
     await session.refresh(question, ["questioner", "answerer"])
 
-    # 답변자 정보 구성
-    answerer_data = None
-    if question.answerer:
-        answerer_data = {
-            "id": question.answerer.id,
-            "nickname": question.answerer.nickname,
-            "profile_image_url": question.answerer.profile_image_url,
-        }
-
-    return QuestionWithAnswerResponse(
-        id=question.id,
-        question=question.question,
-        answer=question.answer,
-        is_private=question.is_private,
-        question_created_at=question.question_created_at,
-        answer_created_at=question.answer_created_at,
-        questioner={
-            "id": question.questioner.id,
-            "nickname": question.questioner.nickname,
-            "profile_image_url": question.questioner.profile_image_url,
-        },
-        answerer=answerer_data,
-    )
+    return _build_question_response(question, _build_answerer_data(question))
 
 
 @router.delete(
@@ -451,30 +439,8 @@ async def get_questions(
 
     questions_data = []
     for question in questions:
-        # 답변자 정보 구성
-        answerer_data = None
-        if question.answerer:
-            answerer_data = {
-                "id": question.answerer.id,
-                "nickname": question.answerer.nickname,
-                "profile_image_url": question.answerer.profile_image_url,
-            }
-
         questions_data.append(
-            QuestionWithAnswerResponse(
-                id=question.id,
-                question=question.question,
-                answer=question.answer,
-                is_private=question.is_private,
-                question_created_at=question.question_created_at,
-                answer_created_at=question.answer_created_at,
-                questioner={
-                    "id": question.questioner.id,
-                    "nickname": question.questioner.nickname,
-                    "profile_image_url": question.questioner.profile_image_url,
-                },
-                answerer=answerer_data,
-            )
+            _build_question_response(question, _build_answerer_data(question))
         )
 
     return QuestionListResponse(items=questions_data)
