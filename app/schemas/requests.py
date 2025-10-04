@@ -185,3 +185,16 @@ class AnswerCreateRequest(BaseRequest):
     """답변 작성"""
 
     answer: str
+
+
+class QuestionUpdateRequest(BaseRequest):
+    """질문 수정"""
+
+    question: str
+    is_private: bool | None = None
+
+
+class AnswerUpdateRequest(BaseRequest):
+    """답변 수정"""
+
+    answer: str
