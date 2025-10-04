@@ -179,3 +179,29 @@ class MoguPostListItemResponse(BaseResponse):
 class MoguPostListPaginatedResponse(BaseResponse):
     posts: list[MoguPostListItemResponse]
     pagination: dict[str, int]
+
+
+# 참여 관련 Response 스키마
+class ParticipationResponse(BaseResponse):
+    user_id: str
+    mogu_post_id: str
+    status: str
+    applied_at: datetime
+    decided_at: datetime | None = None
+
+
+class ParticipationWithUserResponse(BaseResponse):
+    user_id: str
+    status: str
+    applied_at: datetime
+    decided_at: datetime | None = None
+    user: dict[str, str | None]
+
+
+class ParticipationListResponse(BaseResponse):
+    participants: list[ParticipationWithUserResponse]
+
+
+class ParticipationMessageResponse(BaseResponse):
+    message: str
+    participation: ParticipationResponse | None = None

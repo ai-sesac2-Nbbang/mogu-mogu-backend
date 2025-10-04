@@ -163,3 +163,10 @@ class MoguPostListQueryParams(BaseRequest):
     latitude: float  # 필수 파라미터로 변경
     longitude: float  # 필수 파라미터로 변경
     radius: float = 3.0
+
+
+# 참여 관련 Request 스키마
+class ParticipationStatusUpdateRequest(BaseRequest):
+    """참여 상태 업데이트 (승인/거부)"""
+
+    status: str  # "accepted" 또는 "rejected"
