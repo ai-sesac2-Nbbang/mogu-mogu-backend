@@ -244,4 +244,4 @@ class QuestionWithAnswerResponse(BaseResponse):
 
 
 class QuestionListResponse(BaseResponse):
-    questions: list[QuestionWithAnswerResponse]
+    items: list[QuestionWithAnswerResponse]

@@ -477,4 +477,4 @@ async def get_questions(
             )
         )
 
-    return QuestionListResponse(questions=questions_data)
+    return QuestionListResponse(items=questions_data)
