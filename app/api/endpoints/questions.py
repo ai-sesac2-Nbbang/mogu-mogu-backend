@@ -193,6 +193,7 @@ async def update_question(
 
 @router.delete(
     "/{post_id}/questions/{question_id}",
+    status_code=204,
     description="질문 삭제",
 )
 async def delete_question(
@@ -200,7 +201,7 @@ async def delete_question(
     question_id: str,
     current_user: User = Depends(deps.get_current_user),
     session: AsyncSession = Depends(get_async_session),
-) -> dict[str, str]:
+) -> None:
     """질문을 삭제합니다 (답변이 달리기 전까지만 가능)."""
 
     # 질문 조회
@@ -227,8 +228,6 @@ async def delete_question(
     # 질문 삭제
     await session.delete(question)
     await session.commit()
-
-    return {"message": "질문이 삭제되었습니다."}
 
 
 @router.post(
@@ -373,6 +372,7 @@ async def update_answer(
 
 @router.delete(
     "/{post_id}/questions/{question_id}/answer",
+    status_code=204,
     description="답변 삭제 (모구장용)",
 )
 async def delete_answer(
@@ -380,7 +380,7 @@ async def delete_answer(
     question_id: str,
     current_user: User = Depends(deps.get_current_user),
     session: AsyncSession = Depends(get_async_session),
-) -> dict[str, str]:
+) -> None:
     """답변을 삭제합니다 (모구장만, 모구 완료/취소 전까지)."""
 
     # 게시물 조회 및 상태 확인
@@ -410,8 +410,6 @@ async def delete_answer(
     question.answer_created_at = None
 
     await session.commit()
-
-    return {"message": "답변이 삭제되었습니다."}
 
 
 @router.get(
