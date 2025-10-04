@@ -134,6 +134,7 @@ class MoguPostUpdateRequest(BaseRequest):
     mogu_spot: MoguSpotRequest | None = None
     mogu_datetime: datetime | None = None
     target_count: int | None = None
+    status: str | None = None  # PostStatusEnum 값
     images: list[MoguPostImageRequest] | None = None
 
     @field_validator("target_count")

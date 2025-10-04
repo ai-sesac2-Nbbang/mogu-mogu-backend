@@ -176,8 +176,22 @@ class MoguPostListItemResponse(BaseResponse):
     favorite_count: int  # 찜하기 개수
 
 
+class MoguPostWithParticipationResponse(MoguPostListItemResponse):
+    """참여 정보가 포함된 모구 게시물 응답 스키마"""
+
+    # 참여 정보
+    my_participation_status: str
+    my_participation_applied_at: datetime
+    my_participation_decided_at: datetime | None = None
+
+
 class MoguPostListPaginatedResponse(BaseResponse):
     posts: list[MoguPostListItemResponse]
+    pagination: dict[str, int]
+
+
+class MoguPostWithParticipationPaginatedResponse(BaseResponse):
+    posts: list[MoguPostWithParticipationResponse]
     pagination: dict[str, int]
 
 

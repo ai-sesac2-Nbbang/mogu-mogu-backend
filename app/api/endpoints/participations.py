@@ -76,10 +76,27 @@ async def participate_mogu_post(
                 status_code=400,
                 detail="이미 참여 신청하거나 승인된 상태입니다.",
             )
-        elif existing_participation.status == ParticipationStatusEnum.REJECTED:
-            raise HTTPException(
-                status_code=400,
-                detail="거절된 참여 신청입니다.",
+        elif existing_participation.status in [
+            ParticipationStatusEnum.REJECTED,
+            ParticipationStatusEnum.CANCELED,
+        ]:
+            # 재신청 허용: 기존 기록을 업데이트
+            existing_participation.status = ParticipationStatusEnum.APPLIED
+            existing_participation.applied_at = datetime.utcnow()
+            existing_participation.decided_at = None
+
+            await session.commit()
+            await session.refresh(existing_participation)
+
+            return ParticipationMessageResponse(
+                message="참여 요청이 완료되었습니다.",
+                participation=ParticipationResponse(
+                    user_id=existing_participation.user_id,
+                    mogu_post_id=existing_participation.mogu_post_id,
+                    status=existing_participation.status,
+                    applied_at=existing_participation.applied_at,
+                    decided_at=existing_participation.decided_at,
+                ),
             )
 
     # 새로운 참여 요청 생성
@@ -118,6 +135,17 @@ async def cancel_participation(
 ) -> ParticipationMessageResponse:
     """모구 게시물 참여를 취소합니다."""
 
+    # 모구 게시물 조회
+    mogu_post_query = select(MoguPost).where(MoguPost.id == post_id)
+    mogu_post_result = await session.execute(mogu_post_query)
+    mogu_post = mogu_post_result.scalar_one_or_none()
+
+    if not mogu_post:
+        raise HTTPException(
+            status_code=404,
+            detail=api_messages.MOGU_POST_NOT_FOUND,
+        )
+
     # 참여 신청 조회
     query = select(Participation).where(
         and_(
@@ -145,6 +173,10 @@ async def cancel_participation(
         )
 
     # 참여 취소
+    # ACCEPTED 상태였다면 joined_count 감소
+    if participation.status == ParticipationStatusEnum.ACCEPTED:
+        mogu_post.joined_count -= 1
+
     participation.status = ParticipationStatusEnum.CANCELED
     participation.decided_at = datetime.utcnow()
 
@@ -272,8 +304,19 @@ async def update_participation_status(
 
     # 상태 업데이트
     if data.status == "accepted":
+        # 참여자 수 제한 검증
+        if mogu_post.target_count and mogu_post.joined_count >= mogu_post.target_count:
+            raise HTTPException(
+                status_code=400,
+                detail="모구 인원이 이미 가득 찼습니다.",
+            )
+
         participation.status = ParticipationStatusEnum.ACCEPTED
         message = "참여 요청이 승인되었습니다."
+
+        # 모구 게시물의 joined_count 증가
+        mogu_post.joined_count += 1
+
     elif data.status == "rejected":
         participation.status = ParticipationStatusEnum.REJECTED
         message = "참여 요청이 거부되었습니다."
