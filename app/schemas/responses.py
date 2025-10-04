@@ -245,8 +245,3 @@ class QuestionWithAnswerResponse(BaseResponse):
 
 class QuestionListResponse(BaseResponse):
     questions: list[QuestionWithAnswerResponse]
-
-
-class QuestionMessageResponse(BaseResponse):
-    message: str
-    question: QuestionResponse | None = None

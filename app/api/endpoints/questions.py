@@ -17,7 +17,6 @@ from app.schemas.requests import (
 )
 from app.schemas.responses import (
     QuestionListResponse,
-    QuestionMessageResponse,
     QuestionResponse,
     QuestionWithAnswerResponse,
 )
@@ -85,7 +84,7 @@ async def _get_question(
 
 @router.post(
     "/{post_id}/questions",
-    response_model=QuestionMessageResponse,
+    response_model=QuestionResponse,
     description="질문 작성",
 )
 async def create_question(
@@ -93,7 +92,7 @@ async def create_question(
     data: QuestionCreateRequest,
     current_user: User = Depends(deps.get_current_user),
     session: AsyncSession = Depends(get_async_session),
-) -> QuestionMessageResponse:
+) -> QuestionResponse:
     """모구 게시물에 질문을 작성합니다."""
 
     # 게시물 조회 및 상태 확인
@@ -116,21 +115,18 @@ async def create_question(
     # 질문자 정보 로드
     await session.refresh(question, ["questioner"])
 
-    return QuestionMessageResponse(
-        message="질문이 작성되었습니다.",
-        question=QuestionResponse(
-            id=question.id,
-            mogu_post_id=question.mogu_post_id,
-            questioner_id=question.questioner_id,
-            question=question.question,
-            is_private=question.is_private,
-            question_created_at=question.question_created_at,
-            questioner={
-                "id": question.questioner.id,
-                "nickname": question.questioner.nickname,
-                "profile_image_url": question.questioner.profile_image_url,
-            },
-        ),
+    return QuestionResponse(
+        id=question.id,
+        mogu_post_id=question.mogu_post_id,
+        questioner_id=question.questioner_id,
+        question=question.question,
+        is_private=question.is_private,
+        question_created_at=question.question_created_at,
+        questioner={
+            "id": question.questioner.id,
+            "nickname": question.questioner.nickname,
+            "profile_image_url": question.questioner.profile_image_url,
+        },
     )
 
 
