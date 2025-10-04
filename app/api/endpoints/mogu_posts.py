@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from datetime import datetime
 from typing import Any
 
@@ -44,6 +45,32 @@ async def _get_mogu_post(post_id: str, session: AsyncSession) -> MoguPost:
     return mogu_post
 
 
+async def _get_mogu_post_with_relations(
+    post_id: str, session: AsyncSession
+) -> MoguPost:
+    """관계 데이터와 함께 모구 게시물을 조회합니다."""
+    query = (
+        select(MoguPost)
+        .options(
+            selectinload(MoguPost.images),
+            selectinload(MoguPost.user),
+            selectinload(MoguPost.questions_answers),
+        )
+        .where(MoguPost.id == post_id)
+    )
+
+    result = await session.execute(query)
+    mogu_post = result.scalar_one_or_none()
+
+    if not mogu_post:
+        raise HTTPException(
+            status_code=404,
+            detail=api_messages.MOGU_POST_NOT_FOUND,
+        )
+
+    return mogu_post
+
+
 async def _check_post_permissions(mogu_post: MoguPost, current_user: User) -> None:
     """게시물 권한을 확인합니다."""
     if mogu_post.user_id != current_user.id:
@@ -63,6 +90,63 @@ async def _validate_post_status_for_deletion(mogu_post: MoguPost) -> None:
             status_code=400,
             detail=api_messages.MOGU_POST_DELETE_NOT_ALLOWED,
         )
+
+
+async def _get_user_participation_status(
+    post_id: str, user_id: str, session: AsyncSession
+) -> dict[str, Any] | None:
+    """사용자의 참여 상태를 조회합니다."""
+    participation_query = select(Participation).where(
+        and_(
+            Participation.mogu_post_id == post_id,
+            Participation.user_id == user_id,
+        )
+    )
+    participation_result = await session.execute(participation_query)
+    participation = participation_result.scalar_one_or_none()
+
+    if participation:
+        return {
+            "status": participation.status,
+            "joined_at": participation.applied_at,
+        }
+    return None
+
+
+async def _check_favorite_status(
+    post_id: str, user_id: str, session: AsyncSession
+) -> bool:
+    """사용자의 찜하기 상태를 확인합니다."""
+    favorite_query = select(MoguFavorite).where(
+        and_(
+            MoguFavorite.mogu_post_id == post_id,
+            MoguFavorite.user_id == user_id,
+        )
+    )
+    favorite_result = await session.execute(favorite_query)
+    return favorite_result.scalar_one_or_none() is not None
+
+
+def _convert_questions_answers_to_dict(
+    questions_answers: Sequence[Any] | None,
+) -> list[dict[str, Any]] | None:
+    """Q&A 데이터를 딕셔너리 형태로 변환합니다."""
+    if not questions_answers:
+        return None
+
+    return [
+        {
+            "id": qa.id,
+            "questioner_id": qa.questioner_id,
+            "question": qa.question,
+            "answerer_id": qa.answerer_id,
+            "answer": qa.answer,
+            "is_private": qa.is_private,
+            "question_created_at": qa.question_created_at,
+            "answer_created_at": qa.answer_created_at,
+        }
+        for qa in questions_answers
+    ]
 
 
 def _build_mogu_post_response(
@@ -549,72 +633,20 @@ async def get_mogu_post(
 ) -> MoguPostResponse:
     """모구 게시물을 상세 조회합니다."""
 
-    # 게시물 조회
-    query = (
-        select(MoguPost)
-        .options(
-            selectinload(MoguPost.images),
-            selectinload(MoguPost.user),
-            selectinload(MoguPost.questions_answers),
-        )
-        .where(MoguPost.id == post_id)
-    )
-
-    result = await session.execute(query)
-    mogu_post = result.scalar_one_or_none()
-
-    if not mogu_post:
-        raise HTTPException(
-            status_code=404,
-            detail=api_messages.MOGU_POST_NOT_FOUND,
-        )
+    # 게시물 조회 (관계 데이터 포함)
+    mogu_post = await _get_mogu_post_with_relations(post_id, session)
 
     # 내 참여 상태 확인
     my_participation = None
-    if current_user:
-        participation_query = select(Participation).where(
-            and_(
-                Participation.mogu_post_id == post_id,
-                Participation.user_id == current_user.id,
-            )
-        )
-        participation_result = await session.execute(participation_query)
-        participation = participation_result.scalar_one_or_none()
-
-        if participation:
-            my_participation = {
-                "status": participation.status,
-                "joined_at": participation.applied_at,
-            }
-
-    # 찜하기 상태 확인
     is_favorited = False
     if current_user:
-        favorite_query = select(MoguFavorite).where(
-            and_(
-                MoguFavorite.mogu_post_id == post_id,
-                MoguFavorite.user_id == current_user.id,
-            )
+        my_participation = await _get_user_participation_status(
+            post_id, current_user.id, session
         )
-        favorite_result = await session.execute(favorite_query)
-        is_favorited = favorite_result.scalar_one_or_none() is not None
+        is_favorited = await _check_favorite_status(post_id, current_user.id, session)
 
     # Q&A 데이터 변환
-    questions_answers = None
-    if mogu_post.questions_answers:
-        questions_answers = [
-            {
-                "id": qa.id,
-                "questioner_id": qa.questioner_id,
-                "question": qa.question,
-                "answerer_id": qa.answerer_id,
-                "answer": qa.answer,
-                "is_private": qa.is_private,
-                "question_created_at": qa.question_created_at,
-                "answer_created_at": qa.answer_created_at,
-            }
-            for qa in mogu_post.questions_answers
-        ]
+    questions_answers = _convert_questions_answers_to_dict(mogu_post.questions_answers)
 
     return _build_mogu_post_response(
         mogu_post=mogu_post,
