@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from geoalchemy2.shape import from_shape, to_shape
@@ -62,6 +63,59 @@ async def _validate_post_status_for_deletion(mogu_post: MoguPost) -> None:
             status_code=400,
             detail=api_messages.MOGU_POST_DELETE_NOT_ALLOWED,
         )
+
+
+def _build_mogu_post_response(
+    mogu_post: MoguPost,
+    my_participation: dict[str, Any] | None = None,
+    is_favorited: bool = False,
+    questions_answers: list[dict[str, Any]] | None = None,
+) -> MoguPostResponse:
+    """모구 게시물 응답 객체를 생성합니다."""
+    # Shapely를 사용한 위도/경도 추출
+    point = to_shape(mogu_post.mogu_spot)
+    latitude = point.y
+    longitude = point.x
+
+    return MoguPostResponse(
+        id=mogu_post.id,
+        user_id=mogu_post.user_id,
+        title=mogu_post.title,
+        description=mogu_post.description,
+        price=mogu_post.price,
+        category=mogu_post.category,
+        mogu_market=mogu_post.mogu_market,
+        mogu_spot={
+            "latitude": latitude,
+            "longitude": longitude,
+        },
+        mogu_datetime=mogu_post.mogu_datetime,
+        status=mogu_post.status,
+        target_count=mogu_post.target_count,
+        joined_count=mogu_post.joined_count,
+        created_at=mogu_post.created_at,
+        images=(
+            [
+                {
+                    "id": img.id,
+                    "image_url": img.image_url,
+                    "sort_order": img.sort_order,
+                    "is_thumbnail": img.is_thumbnail,
+                }
+                for img in mogu_post.images
+            ]
+            if mogu_post.images
+            else None
+        ),
+        user={
+            "id": mogu_post.user.id,
+            "nickname": mogu_post.user.nickname,
+            "profile_image_url": mogu_post.user.profile_image_url,
+        },
+        my_participation=my_participation,
+        is_favorited=is_favorited,
+        questions_answers=questions_answers,
+    )
 
 
 async def _handle_post_status_change(
@@ -148,44 +202,8 @@ async def create_mogu_post(
     # 응답을 위해 관계 데이터 로드
     await session.refresh(mogu_post, ["images", "user"])
 
-    # Shapely를 사용한 위도/경도 추출
-    point = to_shape(mogu_post.mogu_spot)
-
-    return MoguPostResponse(
-        id=mogu_post.id,
-        user_id=mogu_post.user_id,
-        title=mogu_post.title,
-        description=mogu_post.description,
-        price=mogu_post.price,
-        category=mogu_post.category,
-        mogu_market=mogu_post.mogu_market,
-        mogu_spot={
-            "longitude": point.x,
-            "latitude": point.y,
-        },
-        mogu_datetime=mogu_post.mogu_datetime,
-        status=mogu_post.status,
-        target_count=mogu_post.target_count,
-        joined_count=mogu_post.joined_count,
-        created_at=mogu_post.created_at,
-        images=(
-            [
-                {
-                    "id": img.id,
-                    "image_url": img.image_url,
-                    "sort_order": img.sort_order,
-                    "is_thumbnail": img.is_thumbnail,
-                }
-                for img in mogu_post.images
-            ]
-            if mogu_post.images
-            else None
-        ),
-        user={
-            "id": mogu_post.user.id,
-            "nickname": mogu_post.user.nickname,
-            "profile_image_url": mogu_post.user.profile_image_url,
-        },
+    return _build_mogu_post_response(
+        mogu_post=mogu_post,
         my_participation=None,  # 생성자는 자동으로 참여하지 않음
         is_favorited=False,  # 새로 생성된 게시물은 찜하지 않음
     )
@@ -551,11 +569,6 @@ async def get_mogu_post(
             detail=api_messages.MOGU_POST_NOT_FOUND,
         )
 
-    # Shapely를 사용한 위도/경도 추출
-    point = to_shape(mogu_post.mogu_spot)
-    latitude = point.y
-    longitude = point.x
-
     # 내 참여 상태 확인
     my_participation = None
     if current_user:
@@ -586,60 +599,28 @@ async def get_mogu_post(
         favorite_result = await session.execute(favorite_query)
         is_favorited = favorite_result.scalar_one_or_none() is not None
 
-    return MoguPostResponse(
-        id=mogu_post.id,
-        user_id=mogu_post.user_id,
-        title=mogu_post.title,
-        description=mogu_post.description,
-        price=mogu_post.price,
-        category=mogu_post.category,
-        mogu_market=mogu_post.mogu_market,
-        mogu_spot={
-            "latitude": latitude,
-            "longitude": longitude,
-        },
-        mogu_datetime=mogu_post.mogu_datetime,
-        status=mogu_post.status,
-        target_count=mogu_post.target_count,
-        joined_count=mogu_post.joined_count,
-        created_at=mogu_post.created_at,
-        images=(
-            [
-                {
-                    "id": img.id,
-                    "image_url": img.image_url,
-                    "sort_order": img.sort_order,
-                    "is_thumbnail": img.is_thumbnail,
-                }
-                for img in mogu_post.images
-            ]
-            if mogu_post.images
-            else None
-        ),
-        user={
-            "id": mogu_post.user.id,
-            "nickname": mogu_post.user.nickname,
-            "profile_image_url": mogu_post.user.profile_image_url,
-        },
+    # Q&A 데이터 변환
+    questions_answers = None
+    if mogu_post.questions_answers:
+        questions_answers = [
+            {
+                "id": qa.id,
+                "questioner_id": qa.questioner_id,
+                "question": qa.question,
+                "answerer_id": qa.answerer_id,
+                "answer": qa.answer,
+                "is_private": qa.is_private,
+                "question_created_at": qa.question_created_at,
+                "answer_created_at": qa.answer_created_at,
+            }
+            for qa in mogu_post.questions_answers
+        ]
+
+    return _build_mogu_post_response(
+        mogu_post=mogu_post,
         my_participation=my_participation,
         is_favorited=is_favorited,
-        questions_answers=(
-            [
-                {
-                    "id": qa.id,
-                    "questioner_id": qa.questioner_id,
-                    "question": qa.question,
-                    "answerer_id": qa.answerer_id,
-                    "answer": qa.answer,
-                    "is_private": qa.is_private,
-                    "question_created_at": qa.question_created_at,
-                    "answer_created_at": qa.answer_created_at,
-                }
-                for qa in mogu_post.questions_answers
-            ]
-            if mogu_post.questions_answers
-            else None
-        ),
+        questions_answers=questions_answers,
     )
 
 
@@ -717,44 +698,8 @@ async def update_mogu_post(
     # 응답을 위해 관계 데이터 로드
     await session.refresh(mogu_post, ["images", "user"])
 
-    # Shapely를 사용한 위도/경도 추출
-    point = to_shape(mogu_post.mogu_spot)
-
-    return MoguPostResponse(
-        id=mogu_post.id,
-        user_id=mogu_post.user_id,
-        title=mogu_post.title,
-        description=mogu_post.description,
-        price=mogu_post.price,
-        category=mogu_post.category,
-        mogu_market=mogu_post.mogu_market,
-        mogu_spot={
-            "latitude": point.y,
-            "longitude": point.x,
-        },
-        mogu_datetime=mogu_post.mogu_datetime,
-        status=mogu_post.status,
-        target_count=mogu_post.target_count,
-        joined_count=mogu_post.joined_count,
-        created_at=mogu_post.created_at,
-        images=(
-            [
-                {
-                    "id": img.id,
-                    "image_url": img.image_url,
-                    "sort_order": img.sort_order,
-                    "is_thumbnail": img.is_thumbnail,
-                }
-                for img in mogu_post.images
-            ]
-            if mogu_post.images
-            else None
-        ),
-        user={
-            "id": mogu_post.user.id,
-            "nickname": mogu_post.user.nickname,
-            "profile_image_url": mogu_post.user.profile_image_url,
-        },
+    return _build_mogu_post_response(
+        mogu_post=mogu_post,
         my_participation=None,  # 수정 시에는 참여 상태를 다시 조회하지 않음
         is_favorited=False,  # 수정 시에는 찜하기 상태를 다시 조회하지 않음
     )
