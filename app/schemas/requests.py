@@ -4,7 +4,7 @@ from pydantic import BaseModel, EmailStr, field_validator
 
 # 상수
 WISH_TIMES_LENGTH = 24
-MIN_TARGET_COUNT = 2
+MIN_TARGET_COUNT = 1
 
 
 class BaseRequest(BaseModel):
