@@ -621,7 +621,8 @@ async def _get_reviewable_users(
 
             reviewable_users.append(
                 ReviewableUserResponse.from_participation(
-                    participation, is_rated=existing_rating is not None
+                    participation,
+                    rating_id=existing_rating.id if existing_rating else None,
                 )
             )
 
@@ -642,7 +643,7 @@ async def _get_reviewable_users(
             ReviewableUserResponse.from_user(
                 mogu_post.user,
                 participation_status="mogu_leader",
-                is_rated=existing_rating is not None,
+                rating_id=existing_rating.id if existing_rating else None,
             )
         )
 

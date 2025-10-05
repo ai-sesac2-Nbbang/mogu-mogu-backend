@@ -155,13 +155,13 @@ class ReviewableUserResponse(BaseResponse):
     nickname: str | None = None
     profile_image_url: str | None = None
     participation_status: str
-    is_rated: bool = False
+    rating_id: str | None = None  # 작성된 리뷰의 ID (null이면 리뷰 미작성)
 
     @classmethod
     def from_participation(
         cls,
         participation: "Participation",
-        is_rated: bool = False,
+        rating_id: str | None = None,
     ) -> "ReviewableUserResponse":
         """Participation 모델로부터 ReviewableUserResponse를 생성합니다."""
         return cls(
@@ -169,7 +169,7 @@ class ReviewableUserResponse(BaseResponse):
             nickname=participation.user.nickname or "익명",
             profile_image_url=participation.user.profile_image_url,
             participation_status=participation.status,
-            is_rated=is_rated,
+            rating_id=rating_id,
         )
 
     @classmethod
@@ -177,7 +177,7 @@ class ReviewableUserResponse(BaseResponse):
         cls,
         user: "User",
         participation_status: str,
-        is_rated: bool = False,
+        rating_id: str | None = None,
     ) -> "ReviewableUserResponse":
         """User 모델로부터 ReviewableUserResponse를 생성합니다."""
         return cls(
@@ -185,7 +185,7 @@ class ReviewableUserResponse(BaseResponse):
             nickname=user.nickname or "익명",
             profile_image_url=user.profile_image_url,
             participation_status=participation_status,
-            is_rated=is_rated,
+            rating_id=rating_id,
         )
 
 
@@ -535,6 +535,12 @@ class RatingWithReviewerResponse(BaseResponse):
 
 class RatingListResponse(BaseResponse):
     """평가 목록 응답"""
+
+    items: list[RatingWithReviewerResponse]
+
+
+class MyRatingsResponse(BaseResponse):
+    """내가 작성한 리뷰 목록 응답"""
 
     items: list[RatingWithReviewerResponse]
 
