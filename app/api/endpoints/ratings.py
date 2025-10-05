@@ -16,7 +16,6 @@ from app.schemas.responses import (
     RatingKeywordMasterResponse,
     RatingListResponse,
     RatingResponse,
-    RatingStatusResponse,
     RatingWithReviewerResponse,
     ReviewableUserResponse,
     ReviewableUsersResponse,
@@ -370,6 +369,25 @@ async def update_rating(
             detail="평가 작성자만 수정할 수 있습니다.",
         )
 
+    # 모구 게시물 조회 (기한 확인용)
+    mogu_post_query = select(MoguPost).where(MoguPost.id == post_id)
+    mogu_post_result = await session.execute(mogu_post_query)
+    mogu_post = mogu_post_result.scalar_one_or_none()
+
+    if not mogu_post:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="모구 게시물을 찾을 수 없습니다.",
+        )
+
+    # 평가 수정 기한 확인
+    is_within_deadline, _ = await _check_rating_deadline(mogu_post)
+    if not is_within_deadline:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"평가 수정 기한이 지났습니다. (거래 완료 후 {RATING_DEADLINE_DAYS}일 이내)",
+        )
+
     # 평가 업데이트
     if data.stars is not None:
         rating.stars = data.stars
@@ -403,6 +421,25 @@ async def delete_rating(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="평가 작성자만 삭제할 수 있습니다.",
+        )
+
+    # 모구 게시물 조회 (기한 확인용)
+    mogu_post_query = select(MoguPost).where(MoguPost.id == post_id)
+    mogu_post_result = await session.execute(mogu_post_query)
+    mogu_post = mogu_post_result.scalar_one_or_none()
+
+    if not mogu_post:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="모구 게시물을 찾을 수 없습니다.",
+        )
+
+    # 평가 삭제 기한 확인
+    is_within_deadline, _ = await _check_rating_deadline(mogu_post)
+    if not is_within_deadline:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"평가 삭제 기한이 지났습니다. (거래 완료 후 {RATING_DEADLINE_DAYS}일 이내)",
         )
 
     # 평가 삭제
@@ -468,77 +505,6 @@ async def get_user_keyword_stats(
         keyword_code="temp",
         count=0,
         last_updated=datetime.utcnow(),
-    )
-
-
-@router.get(
-    "/{post_id}/rating-status",
-    response_model=RatingStatusResponse,
-    description="평가 작성 가능 상태 확인",
-)
-async def get_rating_status(
-    post_id: str,
-    current_user: User = Depends(deps.get_current_user),
-    session: AsyncSession = Depends(get_async_session),
-) -> RatingStatusResponse:
-    """현재 사용자가 해당 모구에 대해 평가를 작성할 수 있는지 확인합니다."""
-
-    # 게시물 조회
-    mogu_post = await _get_mogu_post(post_id, session)
-
-    # 모구 완료 상태 확인
-    if mogu_post.status != "completed":
-        return RatingStatusResponse(
-            can_review=False,
-            reason="완료된 모구에만 평가를 작성할 수 있습니다.",
-        )
-
-    # 평가 작성 기한 확인
-    is_within_deadline, deadline_info = await _check_rating_deadline(mogu_post)
-    if not is_within_deadline:
-        return RatingStatusResponse(
-            can_review=False,
-            reason=f"평가 작성 기한이 지났습니다. (거래 완료 후 {RATING_DEADLINE_DAYS}일 이내)",
-            deadline_info=deadline_info,
-        )
-
-    # 모구장인지 확인
-    is_mogu_leader = mogu_post.user_id == current_user.id
-
-    # 모구러인지 확인 (fulfilled 또는 no_show 상태인 참여자)
-    participation_query = select(Participation).where(
-        and_(
-            Participation.mogu_post_id == mogu_post.id,
-            Participation.user_id == current_user.id,
-            Participation.status.in_(["fulfilled", "no_show"]),
-        )
-    )
-    participation_result = await session.execute(participation_query)
-    participation = participation_result.scalar_one_or_none()
-    is_participant = participation is not None
-
-    # 평가 권한 확인
-    if not is_mogu_leader and not is_participant:
-        return RatingStatusResponse(
-            can_review=False,
-            reason="모구장 또는 완료된 참여자만 평가를 작성할 수 있습니다.",
-        )
-
-    # 리뷰 가능한 사용자 목록 조회
-    reviewable_users = await _get_reviewable_users(
-        mogu_post, current_user, is_mogu_leader, session
-    )
-
-    if not reviewable_users:
-        return RatingStatusResponse(
-            can_review=False,
-            reason="평가할 수 있는 사용자가 없습니다.",
-        )
-
-    return RatingStatusResponse(
-        can_review=True,
-        reviewable_users=reviewable_users,
-        deadline_info=deadline_info,
     )
 
 
