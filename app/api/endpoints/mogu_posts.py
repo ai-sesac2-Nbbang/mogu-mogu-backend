@@ -31,7 +31,9 @@ from app.schemas.requests import (
 )
 from app.schemas.responses import (
     MoguPostListItemResponse,
+    MoguPostListItemWithReviewResponse,
     MoguPostListPaginatedResponse,
+    MoguPostListWithReviewPaginatedResponse,
     MoguPostResponse,
     MoguPostWithParticipationPaginatedResponse,
     MoguPostWithParticipationResponse,
@@ -274,7 +276,7 @@ async def get_mogu_posts(
 
 @router.get(
     "/my-posts",
-    response_model=MoguPostListPaginatedResponse,
+    response_model=MoguPostListWithReviewPaginatedResponse,
     description="내가 작성한 게시물 목록",
 )
 async def get_my_posts(
@@ -283,7 +285,7 @@ async def get_my_posts(
     size: int = 20,
     current_user: User = Depends(deps.get_current_user),
     session: AsyncSession = Depends(get_async_session),
-) -> MoguPostListPaginatedResponse:
+) -> MoguPostListWithReviewPaginatedResponse:
     """내가 작성한 모구 게시물 목록을 조회합니다."""
 
     # 기본 쿼리 구성
@@ -333,7 +335,7 @@ async def get_my_posts(
         can_review = await _can_user_review_post(post, current_user, session)
 
         posts_list.append(
-            MoguPostListItemResponse(
+            MoguPostListItemWithReviewResponse(
                 id=post.id,
                 title=post.title,
                 price=post.price,
@@ -350,7 +352,7 @@ async def get_my_posts(
             )
         )
 
-    return MoguPostListPaginatedResponse(
+    return MoguPostListWithReviewPaginatedResponse(
         items=posts_list,
         pagination={
             "page": page,

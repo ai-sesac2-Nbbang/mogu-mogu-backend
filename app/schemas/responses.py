@@ -326,6 +326,11 @@ class MoguPostListItemResponse(BaseResponse):
     created_at: datetime
     thumbnail_image: str | None = None
     favorite_count: int  # 찜하기 개수
+
+
+class MoguPostListItemWithReviewResponse(MoguPostListItemResponse):
+    """리뷰 정보가 포함된 모구 게시물 목록 응답 스키마"""
+
     can_review: bool = False  # 리뷰 작성 가능 여부
 
 
@@ -336,6 +341,7 @@ class MoguPostWithParticipationResponse(MoguPostListItemResponse):
     my_participation_status: str
     my_participation_applied_at: datetime
     my_participation_decided_at: datetime | None = None
+    can_review: bool = False  # 리뷰 작성 가능 여부
 
 
 class MoguPostListPaginatedResponse(BaseResponse):
@@ -343,8 +349,18 @@ class MoguPostListPaginatedResponse(BaseResponse):
     pagination: dict[str, int]
 
 
+class MoguPostListWithReviewPaginatedResponse(BaseResponse):
+    items: list[MoguPostListItemWithReviewResponse]
+    pagination: dict[str, int]
+
+
 class MoguPostWithParticipationPaginatedResponse(BaseResponse):
     items: list[MoguPostWithParticipationResponse]
+    pagination: dict[str, int]
+
+
+class MoguPostFavoritesPaginatedResponse(BaseResponse):
+    items: list[MoguPostListItemResponse]
     pagination: dict[str, int]
 
 
