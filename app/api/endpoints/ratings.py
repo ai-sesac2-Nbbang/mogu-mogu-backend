@@ -269,6 +269,24 @@ async def _get_rating(
     return rating
 
 
+async def _get_rating_by_id(
+    rating_id: str,
+    session: AsyncSession,
+) -> Rating:
+    """평가 ID로 평가를 조회합니다."""
+    rating_query = select(Rating).where(Rating.id == rating_id)
+    rating_result = await session.execute(rating_query)
+    rating = rating_result.scalar_one_or_none()
+
+    if not rating:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="평가를 찾을 수 없습니다.",
+        )
+
+    return rating
+
+
 @router.post(
     "/{post_id}/ratings",
     response_model=RatingResponse,
@@ -360,6 +378,25 @@ async def get_ratings(
     ]
 
     return RatingListResponse(items=ratings_data)
+
+
+@router.get(
+    "/ratings/{rating_id}",
+    response_model=RatingWithReviewerResponse,
+    description="평가 상세 조회",
+)
+async def get_rating(
+    rating_id: str,
+    current_user: User | None = Depends(deps.get_current_user_optional),
+    session: AsyncSession = Depends(get_async_session),
+) -> RatingWithReviewerResponse:
+    """평가 ID로 평가를 상세 조회합니다."""
+
+    # 평가 조회
+    rating = await _get_rating_by_id(rating_id, session)
+
+    # 평가자 정보와 함께 반환
+    return RatingWithReviewerResponse.from_rating(rating)
 
 
 @router.patch(
