@@ -541,7 +541,7 @@ class MyRatingsResponse(BaseResponse):
 class RatingKeywordListResponse(BaseResponse):
     """평가 키워드 목록 응답"""
 
-    keywords: list[RatingKeywordMasterResponse]
+    items: list[RatingKeywordMasterResponse]
 
 
 class UserKeywordStatsResponse(BaseResponse):

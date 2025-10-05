@@ -273,7 +273,11 @@ async def _get_rating_by_id(
     session: AsyncSession,
 ) -> Rating:
     """평가 ID로 평가를 조회합니다."""
-    rating_query = select(Rating).where(Rating.id == rating_id)
+    rating_query = (
+        select(Rating)
+        .options(selectinload(Rating.reviewer))
+        .where(Rating.id == rating_id)
+    )
     rating_result = await session.execute(rating_query)
     rating = rating_result.scalar_one_or_none()
 
@@ -454,7 +458,7 @@ async def get_rating_keywords(
         RatingKeywordMasterResponse.from_keyword_master(keyword) for keyword in keywords
     ]
 
-    return RatingKeywordListResponse(keywords=keywords_data)
+    return RatingKeywordListResponse(items=keywords_data)
 
 
 @router.get(
