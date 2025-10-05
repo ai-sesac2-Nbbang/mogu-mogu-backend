@@ -295,6 +295,7 @@ class MoguPostResponse(BaseResponse):
     title: str
     description: str | None = None
     price: int
+    labor_fee: int
     category: str
     mogu_market: str
     mogu_spot: dict[str, float]
@@ -329,6 +330,7 @@ class MoguPostResponse(BaseResponse):
             title=mogu_post.title,
             description=mogu_post.description,
             price=mogu_post.price,
+            labor_fee=mogu_post.labor_fee,
             category=mogu_post.category,
             mogu_market=mogu_post.mogu_market,
             mogu_spot={
@@ -365,6 +367,7 @@ class MoguPostListItemResponse(BaseResponse):
     id: str
     title: str
     price: int
+    labor_fee: int
     category: str
     mogu_market: str
     mogu_datetime: datetime

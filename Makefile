@@ -23,6 +23,7 @@ RELOAD      ?= --reload
 help:
 	@echo "Targets:"
 	@echo "  start       - FastAPI 개발 서버 실행 (uvicorn)"
+	@echo "  migrate     - Alembic 마이그레이션 실행 (upgrade head)"
 	@echo "  format      - ruff format -> ruff --fix -> mypy"
 	@echo "  lint        - ruff check (읽기 전용) + mypy"
 	@echo "  test        - pytest 실행"
@@ -34,6 +35,11 @@ help:
 .PHONY: start
 start:
 	$(UVICORN) $(APP_MODULE) --host $(HOST) --port $(PORT) $(RELOAD)
+
+# ===== DB Migration =====
+.PHONY: migrate
+migrate:
+	$(RUN) alembic upgrade head
 
 # ===== Code Quality =====
 .PHONY: format

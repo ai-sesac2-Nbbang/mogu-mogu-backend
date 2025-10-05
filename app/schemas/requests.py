@@ -101,6 +101,7 @@ class MoguPostCreateRequest(BaseRequest):
     title: str
     description: str
     price: int
+    labor_fee: int = 0
     category: str  # CategoryEnum 값
     mogu_market: str  # MarketEnum 값
     mogu_spot: MoguSpotRequest
@@ -129,6 +130,7 @@ class MoguPostUpdateRequest(BaseRequest):
     title: str | None = None
     description: str | None = None
     price: int | None = None
+    labor_fee: int | None = None
     category: str | None = None
     mogu_market: str | None = None
     mogu_spot: MoguSpotRequest | None = None

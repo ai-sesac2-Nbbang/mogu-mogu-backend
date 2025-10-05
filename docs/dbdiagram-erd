@@ -131,7 +131,8 @@ Table mogu_post {
   user_id         uuid        [not null, note: '모구장 FK']
   title           text        [not null]
   description     text
-  price           int         [not null, note: '수고비 포함 최종 가격']
+  price           int         [not null, note: '구매 가격']
+  labor_fee       int         [not null, default: 0, note: '수고비 (기본값: 0)']
   category       category_enum [not null, note: '게시물 카테고리 (단일 선택)']
 
   mogu_market     market_enum   [not null]
