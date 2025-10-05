@@ -7,7 +7,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.api import deps
-from app.api.common import _get_mogu_post, _get_mogu_post_with_relations
+from app.api.common import (
+    _check_user_participation_status,
+    _get_mogu_post,
+    _get_mogu_post_with_relations,
+    _validate_rating_permissions,
+)
 from app.core.database_session import get_async_session
 from app.models import MoguPost, Participation, Rating, RatingKeywordMaster, User
 from app.schemas.requests import RatingCreateRequest, RatingUpdateRequest
@@ -183,13 +188,13 @@ async def _check_rating_completion(
     return all_ratings_completed, completion_info
 
 
-async def _validate_rating_permissions(
+async def _validate_rating_target(
     mogu_post: MoguPost,
     current_user: User,
     reviewee_id: str,
     session: AsyncSession,
 ) -> None:
-    """평가 권한 및 대상 유효성을 검증합니다."""
+    """평가 대상 유효성을 검증합니다."""
 
     # 1. 자기 자신에게 평가하는 것 방지
     if current_user.id == reviewee_id:
@@ -198,29 +203,21 @@ async def _validate_rating_permissions(
             detail="자기 자신에게는 평가를 작성할 수 없습니다.",
         )
 
-    # 2. 모구장인지 확인
-    is_mogu_leader = mogu_post.user_id == current_user.id
+    # 2. 모구장/참여자 확인
+    (
+        is_mogu_leader,
+        is_participant,
+        participation,
+    ) = await _check_user_participation_status(mogu_post, current_user.id, session)
 
-    # 3. 모구러인지 확인 (참여 상태가 fulfilled 또는 no_show인 경우)
-    participation_query = select(Participation).where(
-        and_(
-            Participation.mogu_post_id == mogu_post.id,
-            Participation.user_id == current_user.id,
-            Participation.status.in_(["fulfilled", "no_show"]),
-        )
-    )
-    participation_result = await session.execute(participation_query)
-    participation = participation_result.scalar_one_or_none()
-    is_participant = participation is not None
-
-    # 4. 평가 권한 확인
+    # 3. 평가 권한 확인
     if not is_mogu_leader and not is_participant:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="모구장 또는 참여자만 평가를 작성할 수 있습니다.",
         )
 
-    # 5. 평가 대상 유효성 확인
+    # 4. 평가 대상 유효성 확인
     if is_mogu_leader:
         # 모구장이 평가할 때: reviewee_id가 해당 모구의 참여자여야 함
         target_participation_query = select(Participation).where(
@@ -306,10 +303,8 @@ async def create_rating(
     mogu_post = await _validate_mogu_post_for_rating(data.mogu_post_id, session)
     await _validate_rating_deadline(mogu_post, "평가 작성")
 
-    # 평가 권한 검증
-    await _validate_rating_permissions(
-        mogu_post, current_user, data.reviewee_id, session
-    )
+    # 평가 권한 및 대상 검증
+    await _validate_rating_target(mogu_post, current_user, data.reviewee_id, session)
 
     # 중복 평가 방지
     existing_rating_query = select(Rating).where(
@@ -482,27 +477,12 @@ async def get_reviewable_users(
     # 평가 작성 기한 확인
     await _validate_rating_deadline(mogu_post, "평가 작성")
 
-    # 모구장인지 확인
-    is_mogu_leader = mogu_post.user_id == current_user.id
+    # 모구장/참여자 확인 및 권한 검증
+    await _validate_rating_permissions(mogu_post, current_user, session)
 
-    # 모구러인지 확인 (fulfilled 또는 no_show 상태인 참여자)
-    participation_query = select(Participation).where(
-        and_(
-            Participation.mogu_post_id == mogu_post.id,
-            Participation.user_id == current_user.id,
-            Participation.status.in_(["fulfilled", "no_show"]),
-        )
+    is_mogu_leader, is_participant, _ = await _check_user_participation_status(
+        mogu_post, current_user.id, session
     )
-    participation_result = await session.execute(participation_query)
-    participation = participation_result.scalar_one_or_none()
-    is_participant = participation is not None
-
-    # 평가 권한 확인
-    if not is_mogu_leader and not is_participant:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="모구장 또는 완료된 참여자만 평가를 작성할 수 있습니다.",
-        )
 
     # 리뷰 가능한 사용자 목록 조회
     reviewable_users = await _get_reviewable_users(

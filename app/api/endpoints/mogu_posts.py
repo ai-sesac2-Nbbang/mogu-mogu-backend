@@ -1,25 +1,29 @@
 from datetime import datetime
-from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi import status as http_status
 from geoalchemy2.shape import from_shape
 from shapely.geometry import Point
-from sqlalchemy import and_, desc, func, select
+from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.api import api_messages, deps
 from app.api.common import (
+    _check_favorite_status,
     _check_post_permissions,
+    _check_user_participation_status,
+    _extract_thumbnail_image,
+    _get_favorite_count,
     _get_mogu_post,
     _get_mogu_post_with_relations,
+    _get_user_participation_status,
     _validate_post_status_for_deletion,
 )
 from app.api.endpoints.ratings import _check_rating_completion, _check_rating_deadline
 from app.core.database_session import get_async_session
 from app.enums import ParticipationStatusEnum, PostStatusEnum
-from app.models import MoguFavorite, MoguPost, MoguPostImage, Participation, User
+from app.models import MoguPost, MoguPostImage, Participation, User
 from app.schemas.requests import (
     MoguPostCreateRequest,
     MoguPostListQueryParams,
@@ -38,39 +42,6 @@ router = APIRouter()
 
 
 # 기타 헬퍼 함수들
-async def _get_user_participation_status(
-    post_id: str, user_id: str, session: AsyncSession
-) -> dict[str, Any] | None:
-    """사용자의 참여 상태를 조회합니다."""
-    participation_query = select(Participation).where(
-        and_(
-            Participation.mogu_post_id == post_id,
-            Participation.user_id == user_id,
-        )
-    )
-    participation_result = await session.execute(participation_query)
-    participation = participation_result.scalar_one_or_none()
-
-    if participation:
-        return {
-            "status": participation.status,
-            "joined_at": participation.applied_at,
-        }
-    return None
-
-
-async def _check_favorite_status(
-    post_id: str, user_id: str, session: AsyncSession
-) -> bool:
-    """사용자의 찜하기 상태를 확인합니다."""
-    favorite_query = select(MoguFavorite).where(
-        and_(
-            MoguFavorite.mogu_post_id == post_id,
-            MoguFavorite.user_id == user_id,
-        )
-    )
-    favorite_result = await session.execute(favorite_query)
-    return favorite_result.scalar_one_or_none() is not None
 
 
 async def _can_user_review_post(
@@ -87,20 +58,10 @@ async def _can_user_review_post(
     if not is_within_deadline:
         return False
 
-    # 모구장인지 확인
-    is_mogu_leader = mogu_post.user_id == current_user.id
-
-    # 모구러인지 확인 (fulfilled 또는 no_show 상태인 참여자)
-    participation_query = select(Participation).where(
-        and_(
-            Participation.mogu_post_id == mogu_post.id,
-            Participation.user_id == current_user.id,
-            Participation.status.in_(["fulfilled", "no_show"]),
-        )
+    # 모구장/참여자 확인
+    is_mogu_leader, is_participant, _ = await _check_user_participation_status(
+        mogu_post, current_user.id, session
     )
-    participation_result = await session.execute(participation_query)
-    participation = participation_result.scalar_one_or_none()
-    is_participant = participation is not None
 
     # 평가 권한 확인
     if not is_mogu_leader and not is_participant:
@@ -276,24 +237,10 @@ async def get_mogu_posts(
     posts = []
     for post in mogu_posts:
         # 찜하기 개수 조회
-        favorite_count_query = (
-            select(func.count())
-            .select_from(MoguFavorite)
-            .where(MoguFavorite.mogu_post_id == post.id)
-        )
-        favorite_count_result = await session.execute(favorite_count_query)
-        favorite_count = favorite_count_result.scalar() or 0
+        favorite_count = await _get_favorite_count(post.id, session)
 
         # 썸네일 이미지 추출
-        thumbnail_image = None
-        if post.images:
-            # 썸네일 이미지 찾기
-            thumbnail_img = next((img for img in post.images if img.is_thumbnail), None)
-            if thumbnail_img:
-                thumbnail_image = thumbnail_img.image_url
-            else:
-                # 썸네일이 없으면 첫 번째 이미지 사용
-                thumbnail_image = post.images[0].image_url
+        thumbnail_image = _extract_thumbnail_image(post)
 
         posts.append(
             MoguPostListItemResponse(
@@ -303,11 +250,7 @@ async def get_mogu_posts(
                 category=post.category,
                 mogu_market=post.mogu_market,
                 mogu_datetime=post.mogu_datetime,
-                status=(
-                    post.status.value
-                    if hasattr(post.status, "value")
-                    else str(post.status)
-                ),
+                status=post.status.value,
                 target_count=post.target_count or 0,
                 joined_count=post.joined_count,
                 created_at=post.created_at,
@@ -379,24 +322,10 @@ async def get_my_posts(
     posts_list = []
     for post in posts:
         # 찜하기 개수 조회
-        favorite_count_query = (
-            select(func.count())
-            .select_from(MoguFavorite)
-            .where(MoguFavorite.mogu_post_id == post.id)
-        )
-        favorite_count_result = await session.execute(favorite_count_query)
-        favorite_count = favorite_count_result.scalar() or 0
+        favorite_count = await _get_favorite_count(post.id, session)
 
         # 썸네일 이미지 추출
-        thumbnail_image = None
-        if post.images:
-            # 썸네일 이미지 찾기
-            thumbnail_img = next((img for img in post.images if img.is_thumbnail), None)
-            if thumbnail_img:
-                thumbnail_image = thumbnail_img.image_url
-            else:
-                # 썸네일이 없으면 첫 번째 이미지 사용
-                thumbnail_image = post.images[0].image_url
+        thumbnail_image = _extract_thumbnail_image(post)
 
         # 리뷰 가능 여부 확인
         can_review = await _can_user_review_post(post, current_user, session)
@@ -409,11 +338,7 @@ async def get_my_posts(
                 category=post.category,
                 mogu_market=post.mogu_market,
                 mogu_datetime=post.mogu_datetime,
-                status=(
-                    post.status.value
-                    if hasattr(post.status, "value")
-                    else str(post.status)
-                ),
+                status=post.status.value,
                 target_count=post.target_count or 0,
                 joined_count=post.joined_count,
                 created_at=post.created_at,
@@ -487,24 +412,10 @@ async def get_my_participations(
     posts_list: list[MoguPostWithParticipationResponse] = []
     for post, participation in rows:
         # 찜하기 개수 조회
-        favorite_count_query = (
-            select(func.count())
-            .select_from(MoguFavorite)
-            .where(MoguFavorite.mogu_post_id == post.id)
-        )
-        favorite_count_result = await session.execute(favorite_count_query)
-        favorite_count = favorite_count_result.scalar() or 0
+        favorite_count = await _get_favorite_count(post.id, session)
 
         # 썸네일 이미지 추출
-        thumbnail_image = None
-        if post.images:
-            # 썸네일 이미지 찾기
-            thumbnail_img = next((img for img in post.images if img.is_thumbnail), None)
-            if thumbnail_img:
-                thumbnail_image = thumbnail_img.image_url
-            else:
-                # 썸네일이 없으면 첫 번째 이미지 사용
-                thumbnail_image = post.images[0].image_url
+        thumbnail_image = _extract_thumbnail_image(post)
 
         # 리뷰 가능 여부 확인
         can_review = await _can_user_review_post(post, current_user, session)
@@ -517,11 +428,7 @@ async def get_my_participations(
                 category=post.category,
                 mogu_market=post.mogu_market,
                 mogu_datetime=post.mogu_datetime,
-                status=(
-                    post.status.value
-                    if hasattr(post.status, "value")
-                    else str(post.status)
-                ),
+                status=post.status.value,
                 target_count=post.target_count or 0,
                 joined_count=post.joined_count,
                 created_at=post.created_at,
