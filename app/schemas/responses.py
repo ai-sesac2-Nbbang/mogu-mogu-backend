@@ -13,7 +13,6 @@ if TYPE_CHECKING:
         RatingKeywordMaster,
         User,
     )
-    from app.schemas.types import RatingKeywordCodeLiteral
 
 
 class PaginationInfo(TypedDict):
@@ -536,7 +535,7 @@ class RatingResponse(BaseResponse):
     reviewer_id: str
     reviewee_id: str
     stars: int
-    keywords: "list[RatingKeywordCodeLiteral] | None" = None
+    keywords: list[str] | None = None
     created_at: datetime
 
     @classmethod
@@ -561,7 +560,7 @@ class RatingWithReviewerResponse(BaseResponse):
     reviewer_id: str
     reviewee_id: str
     stars: int
-    keywords: "list[RatingKeywordCodeLiteral] | None" = None
+    keywords: list[str] | None = None
     created_at: datetime
     reviewer: dict[str, str | None]
 

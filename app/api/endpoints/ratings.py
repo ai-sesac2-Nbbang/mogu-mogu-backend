@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta
+from typing import cast
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import and_, select
@@ -319,7 +320,7 @@ async def create_rating(
         reviewer_id=current_user.id,
         reviewee_id=data.reviewee_id,
         stars=data.stars,
-        keywords=data.keywords,
+        keywords=cast(list[str], data.keywords),
     )
 
     session.add(rating)
@@ -379,7 +380,7 @@ async def update_rating(
     if data.stars is not None:
         rating.stars = data.stars
     if data.keywords is not None:
-        rating.keywords = data.keywords
+        rating.keywords = cast(list[str], data.keywords)
 
     await session.commit()
     await session.refresh(rating)
