@@ -25,6 +25,9 @@ from app.schemas.responses import (
 
 router = APIRouter()
 
+# rating-keywords 전용 라우터 (인증 불필요)
+keywords_router = APIRouter()
+
 # 평가 작성 기한 (거래 완료 후 3일)
 RATING_DEADLINE_DAYS = 3
 
@@ -61,6 +64,95 @@ async def _check_rating_deadline(
     return is_within_deadline, deadline_info
 
 
+async def _check_rating_completion(
+    mogu_post: MoguPost,
+    session: AsyncSession,
+) -> tuple[bool, dict[str, Any]]:
+    """모든 필요한 평가가 완료되었는지 확인합니다."""
+
+    # 1. 모구장과 모든 평가 대상 참여자 조회 (fulfilled + no_show)
+    mogu_leader_id = mogu_post.user_id
+
+    fulfilled_participants_query = select(Participation).where(
+        and_(
+            Participation.mogu_post_id == mogu_post.id,
+            Participation.status.in_(["fulfilled", "no_show"]),
+        )
+    )
+    fulfilled_participants_result = await session.execute(fulfilled_participants_query)
+    fulfilled_participants = fulfilled_participants_result.scalars().all()
+
+    # 2. 필요한 평가 관계 정의
+    required_ratings = []
+
+    # 모구장 → 각 참여자 평가
+    for participant in fulfilled_participants:
+        required_ratings.append(
+            {
+                "reviewer_id": mogu_leader_id,
+                "reviewee_id": participant.user_id,
+                "type": "leader_to_participant",
+            }
+        )
+
+    # 각 참여자 → 모구장 평가
+    for participant in fulfilled_participants:
+        required_ratings.append(
+            {
+                "reviewer_id": participant.user_id,
+                "reviewee_id": mogu_leader_id,
+                "type": "participant_to_leader",
+            }
+        )
+
+    # 3. 실제 작성된 평가 조회
+    written_ratings_query = select(Rating).where(Rating.mogu_post_id == mogu_post.id)
+    written_ratings_result = await session.execute(written_ratings_query)
+    written_ratings = written_ratings_result.scalars().all()
+
+    # 4. 완료된 평가 추적
+    completed_ratings = []
+    for rating in written_ratings:
+        completed_ratings.append(
+            {
+                "reviewer_id": rating.reviewer_id,
+                "reviewee_id": rating.reviewee_id,
+            }
+        )
+
+    # 5. 완료 여부 확인
+    all_ratings_completed = True
+    missing_ratings = []
+
+    for required_rating in required_ratings:
+        is_completed = any(
+            completed["reviewer_id"] == required_rating["reviewer_id"]
+            and completed["reviewee_id"] == required_rating["reviewee_id"]
+            for completed in completed_ratings
+        )
+
+        if not is_completed:
+            all_ratings_completed = False
+            missing_ratings.append(required_rating)
+
+    # 6. 완료 정보 구성
+    completion_info = {
+        "is_all_ratings_completed": all_ratings_completed,
+        "total_required_ratings": len(required_ratings),
+        "total_completed_ratings": len(completed_ratings),
+        "completion_percentage": (
+            round((len(completed_ratings) / len(required_ratings)) * 100, 1)
+            if required_ratings
+            else 100
+        ),
+        "missing_ratings_count": len(missing_ratings),
+        "participants_count": len(fulfilled_participants),
+        "leader_id": mogu_leader_id,
+    }
+
+    return all_ratings_completed, completion_info
+
+
 async def _validate_rating_permissions(
     mogu_post: MoguPost,
     current_user: User,
@@ -79,12 +171,12 @@ async def _validate_rating_permissions(
     # 2. 모구장인지 확인
     is_mogu_leader = mogu_post.user_id == current_user.id
 
-    # 3. 모구러인지 확인 (참여 상태가 fulfilled인 경우만)
+    # 3. 모구러인지 확인 (참여 상태가 fulfilled 또는 no_show인 경우)
     participation_query = select(Participation).where(
         and_(
             Participation.mogu_post_id == mogu_post.id,
             Participation.user_id == current_user.id,
-            Participation.status == "fulfilled",
+            Participation.status.in_(["fulfilled", "no_show"]),
         )
     )
     participation_result = await session.execute(participation_query)
@@ -105,7 +197,7 @@ async def _validate_rating_permissions(
             and_(
                 Participation.mogu_post_id == mogu_post.id,
                 Participation.user_id == reviewee_id,
-                Participation.status == "fulfilled",
+                Participation.status.in_(["fulfilled", "no_show"]),
             )
         )
         target_participation_result = await session.execute(target_participation_query)
@@ -318,7 +410,7 @@ async def delete_rating(
     await session.commit()
 
 
-@router.get(
+@keywords_router.get(
     "/rating-keywords",
     response_model=RatingKeywordListResponse,
     description="평가 키워드 목록 조회",
@@ -413,12 +505,12 @@ async def get_rating_status(
     # 모구장인지 확인
     is_mogu_leader = mogu_post.user_id == current_user.id
 
-    # 모구러인지 확인 (FULFILLED 상태인 참여자만)
+    # 모구러인지 확인 (fulfilled 또는 no_show 상태인 참여자)
     participation_query = select(Participation).where(
         and_(
             Participation.mogu_post_id == mogu_post.id,
             Participation.user_id == current_user.id,
-            Participation.status == "fulfilled",
+            Participation.status.in_(["fulfilled", "no_show"]),
         )
     )
     participation_result = await session.execute(participation_query)
@@ -483,12 +575,12 @@ async def get_reviewable_users(
     # 모구장인지 확인
     is_mogu_leader = mogu_post.user_id == current_user.id
 
-    # 모구러인지 확인 (FULFILLED 상태인 참여자만)
+    # 모구러인지 확인 (fulfilled 또는 no_show 상태인 참여자)
     participation_query = select(Participation).where(
         and_(
             Participation.mogu_post_id == mogu_post.id,
             Participation.user_id == current_user.id,
-            Participation.status == "fulfilled",
+            Participation.status.in_(["fulfilled", "no_show"]),
         )
     )
     participation_result = await session.execute(participation_query)
@@ -521,14 +613,14 @@ async def _get_reviewable_users(
     reviewable_users = []
 
     if is_mogu_leader:
-        # 모구장이 리뷰할 수 있는 사용자: FULFILLED 상태인 참여자들
+        # 모구장이 리뷰할 수 있는 사용자: fulfilled 또는 no_show 상태인 참여자들
         participations_query = (
             select(Participation)
             .options(selectinload(Participation.user))
             .where(
                 and_(
                     Participation.mogu_post_id == mogu_post.id,
-                    Participation.status == "fulfilled",
+                    Participation.status.in_(["fulfilled", "no_show"]),
                 )
             )
         )
