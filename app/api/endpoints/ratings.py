@@ -1,4 +1,5 @@
-from datetime import datetime
+from datetime import datetime, timedelta
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import and_, select
@@ -23,6 +24,41 @@ from app.schemas.responses import (
 )
 
 router = APIRouter()
+
+# 평가 작성 기한 (거래 완료 후 3일)
+RATING_DEADLINE_DAYS = 3
+
+
+async def _check_rating_deadline(
+    mogu_post: MoguPost,
+) -> tuple[bool, dict[str, Any] | None]:
+    """평가 작성 기한을 확인합니다."""
+
+    # 모구 날짜를 거래 완료 날짜로 사용
+    completed_at = mogu_post.mogu_datetime
+
+    # 기한 계산 (거래 완료 후 3일)
+    deadline = completed_at + timedelta(days=RATING_DEADLINE_DAYS)
+    now = datetime.utcnow()
+
+    # 시간대 정보 제거 (UTC로 통일)
+    if now.tzinfo is not None:
+        now = now.replace(tzinfo=None)
+    if deadline.tzinfo is not None:
+        deadline = deadline.replace(tzinfo=None)
+    if completed_at.tzinfo is not None:
+        completed_at = completed_at.replace(tzinfo=None)
+
+    is_within_deadline = now <= deadline
+
+    deadline_info = {
+        "completed_at": completed_at.isoformat(),
+        "deadline": deadline.isoformat(),
+        "remaining_hours": max(0, int((deadline - now).total_seconds() / 3600)),
+        "is_expired": not is_within_deadline,
+    }
+
+    return is_within_deadline, deadline_info
 
 
 async def _validate_rating_permissions(
@@ -135,6 +171,14 @@ async def create_rating(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="완료된 모구에만 평가를 작성할 수 있습니다.",
+        )
+
+    # 평가 작성 기한 확인
+    is_within_deadline, deadline_info = await _check_rating_deadline(mogu_post)
+    if not is_within_deadline:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"평가 작성 기한이 지났습니다. (거래 완료 후 {RATING_DEADLINE_DAYS}일 이내)",
         )
 
     # 평가 권한 및 대상 유효성 검증
@@ -357,6 +401,15 @@ async def get_rating_status(
             reason="완료된 모구에만 평가를 작성할 수 있습니다.",
         )
 
+    # 평가 작성 기한 확인
+    is_within_deadline, deadline_info = await _check_rating_deadline(mogu_post)
+    if not is_within_deadline:
+        return RatingStatusResponse(
+            can_review=False,
+            reason=f"평가 작성 기한이 지났습니다. (거래 완료 후 {RATING_DEADLINE_DAYS}일 이내)",
+            deadline_info=deadline_info,
+        )
+
     # 모구장인지 확인
     is_mogu_leader = mogu_post.user_id == current_user.id
 
@@ -393,6 +446,7 @@ async def get_rating_status(
     return RatingStatusResponse(
         can_review=True,
         reviewable_users=reviewable_users,
+        deadline_info=deadline_info,
     )
 
 
@@ -416,6 +470,14 @@ async def get_reviewable_users(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="완료된 모구에만 평가를 작성할 수 있습니다.",
+        )
+
+    # 평가 작성 기한 확인
+    is_within_deadline, deadline_info = await _check_rating_deadline(mogu_post)
+    if not is_within_deadline:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"평가 작성 기한이 지났습니다. (거래 완료 후 {RATING_DEADLINE_DAYS}일 이내)",
         )
 
     # 모구장인지 확인

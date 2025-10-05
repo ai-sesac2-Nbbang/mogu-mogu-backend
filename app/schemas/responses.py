@@ -201,6 +201,7 @@ class RatingStatusResponse(BaseResponse):
     can_review: bool
     reviewable_users: list[ReviewableUserResponse] | None = None
     reason: str | None = None
+    deadline_info: dict[str, Any] | None = None
 
 
 class UserKeywordStatsSummaryResponse(BaseResponse):
