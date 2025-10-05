@@ -7,10 +7,16 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api import deps
+from app.core.database_session import get_async_session
 from app.enums import UserStatusEnum
 from app.models import User, UserWishSpot
 from app.schemas.requests import UserUpdateRequest, WishSpotCreateRequest
-from app.schemas.responses import UserResponse, WishSpotListResponse, WishSpotResponse
+from app.schemas.responses import (
+    UserKeywordStatsResponse,
+    UserResponse,
+    WishSpotListResponse,
+    WishSpotResponse,
+)
 
 router = APIRouter()
 
@@ -207,3 +213,35 @@ async def delete_current_user(
     # 현재: 하드 삭제 (빠른 개발용)
     await session.execute(delete(User).where(User.id == current_user.id))
     await session.commit()
+
+
+@router.get(
+    "/{user_id}/stats/keywords",
+    response_model=UserKeywordStatsResponse,
+    description="사용자 키워드 통계 조회",
+)
+async def get_user_keyword_stats(
+    user_id: str,
+    session: AsyncSession = Depends(get_async_session),
+) -> UserKeywordStatsResponse:
+    """사용자의 키워드 통계를 조회합니다."""
+
+    # 사용자 존재 확인
+    user_query = select(User).where(User.id == user_id)
+    user_result = await session.execute(user_query)
+    user = user_result.scalar_one_or_none()
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="사용자를 찾을 수 없습니다.",
+        )
+
+    # TODO: UserKeywordStats 모델이 구현되면 실제 통계 데이터 조회
+    # 현재는 임시 데이터 반환
+    return UserKeywordStatsResponse(
+        user_id=user_id,
+        keyword_code="temp",
+        count=0,
+        last_updated=datetime.utcnow(),
+    )
