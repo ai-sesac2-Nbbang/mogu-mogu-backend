@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.api import deps
-from app.api.common import _get_mogu_post
+from app.api.common import _get_mogu_post, _get_mogu_post_with_relations
 from app.core.database_session import get_async_session
 from app.models import MoguPost, Participation, Rating, RatingKeywordMaster, User
 from app.schemas.requests import RatingCreateRequest, RatingUpdateRequest
@@ -520,8 +520,8 @@ async def get_reviewable_users(
 ) -> ReviewableUsersResponse:
     """현재 사용자가 리뷰할 수 있는 사용자 목록을 조회합니다."""
 
-    # 게시물 조회
-    mogu_post = await _get_mogu_post(post_id, session)
+    # 게시물 조회 (user 관계 포함)
+    mogu_post = await _get_mogu_post_with_relations(post_id, session)
 
     # 모구 완료 상태 확인
     if mogu_post.status != "completed":
@@ -607,7 +607,7 @@ async def _get_reviewable_users(
 
             reviewable_users.append(
                 ReviewableUserResponse.from_participation(
-                    participation, is_already_rated=existing_rating is not None
+                    participation, is_rated=existing_rating is not None
                 )
             )
 
@@ -628,7 +628,7 @@ async def _get_reviewable_users(
             ReviewableUserResponse.from_user(
                 mogu_post.user,
                 participation_status="mogu_leader",
-                is_already_rated=existing_rating is not None,
+                is_rated=existing_rating is not None,
             )
         )
 

@@ -155,13 +155,13 @@ class ReviewableUserResponse(BaseResponse):
     nickname: str | None = None
     profile_image_url: str | None = None
     participation_status: str
-    is_already_rated: bool = False
+    is_rated: bool = False
 
     @classmethod
     def from_participation(
         cls,
         participation: "Participation",
-        is_already_rated: bool = False,
+        is_rated: bool = False,
     ) -> "ReviewableUserResponse":
         """Participation 모델로부터 ReviewableUserResponse를 생성합니다."""
         return cls(
@@ -169,7 +169,7 @@ class ReviewableUserResponse(BaseResponse):
             nickname=participation.user.nickname or "익명",
             profile_image_url=participation.user.profile_image_url,
             participation_status=participation.status,
-            is_already_rated=is_already_rated,
+            is_rated=is_rated,
         )
 
     @classmethod
@@ -177,7 +177,7 @@ class ReviewableUserResponse(BaseResponse):
         cls,
         user: "User",
         participation_status: str,
-        is_already_rated: bool = False,
+        is_rated: bool = False,
     ) -> "ReviewableUserResponse":
         """User 모델로부터 ReviewableUserResponse를 생성합니다."""
         return cls(
@@ -185,7 +185,7 @@ class ReviewableUserResponse(BaseResponse):
             nickname=user.nickname or "익명",
             profile_image_url=user.profile_image_url,
             participation_status=participation_status,
-            is_already_rated=is_already_rated,
+            is_rated=is_rated,
         )
 
 
