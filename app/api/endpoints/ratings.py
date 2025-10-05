@@ -63,6 +63,35 @@ async def _check_rating_deadline(
     return is_within_deadline, deadline_info
 
 
+async def _validate_mogu_post_for_rating(
+    post_id: str, session: AsyncSession, include_user_relation: bool = False
+) -> MoguPost:
+    """평가 관련 작업을 위한 모구 게시물 조회 및 검증"""
+    if include_user_relation:
+        mogu_post = await _get_mogu_post_with_relations(post_id, session)
+    else:
+        mogu_post = await _get_mogu_post(post_id, session)
+
+    # 모구 완료 상태 확인
+    if mogu_post.status != "completed":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="완료된 모구에만 평가를 작성할 수 있습니다.",
+        )
+
+    return mogu_post
+
+
+async def _validate_rating_deadline(mogu_post: MoguPost, action: str = "평가") -> None:
+    """평가 관련 작업의 기한을 확인합니다."""
+    is_within_deadline, _ = await _check_rating_deadline(mogu_post)
+    if not is_within_deadline:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"{action} 기한이 지났습니다. (거래 완료 후 {RATING_DEADLINE_DAYS}일 이내)",
+        )
+
+
 async def _check_rating_completion(
     mogu_post: MoguPost,
     session: AsyncSession,
@@ -255,22 +284,10 @@ async def create_rating(
     """모구 게시물에 평가를 작성합니다."""
 
     # 게시물 조회 및 상태 확인
-    mogu_post = await _get_mogu_post(post_id, session)
-
-    # 모구 완료 상태 확인
-    if mogu_post.status != "completed":
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="완료된 모구에만 평가를 작성할 수 있습니다.",
-        )
+    mogu_post = await _validate_mogu_post_for_rating(post_id, session)
 
     # 평가 작성 기한 확인
-    is_within_deadline, deadline_info = await _check_rating_deadline(mogu_post)
-    if not is_within_deadline:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"평가 작성 기한이 지났습니다. (거래 완료 후 {RATING_DEADLINE_DAYS}일 이내)",
-        )
+    await _validate_rating_deadline(mogu_post, "평가 작성")
 
     # 평가 권한 및 대상 유효성 검증
     await _validate_rating_permissions(
@@ -369,24 +386,9 @@ async def update_rating(
             detail="평가 작성자만 수정할 수 있습니다.",
         )
 
-    # 모구 게시물 조회 (기한 확인용)
-    mogu_post_query = select(MoguPost).where(MoguPost.id == post_id)
-    mogu_post_result = await session.execute(mogu_post_query)
-    mogu_post = mogu_post_result.scalar_one_or_none()
-
-    if not mogu_post:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="모구 게시물을 찾을 수 없습니다.",
-        )
-
-    # 평가 수정 기한 확인
-    is_within_deadline, _ = await _check_rating_deadline(mogu_post)
-    if not is_within_deadline:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"평가 수정 기한이 지났습니다. (거래 완료 후 {RATING_DEADLINE_DAYS}일 이내)",
-        )
+    # 모구 게시물 조회 및 기한 확인
+    mogu_post = await _validate_mogu_post_for_rating(post_id, session)
+    await _validate_rating_deadline(mogu_post, "평가 수정")
 
     # 평가 업데이트
     if data.stars is not None:
@@ -423,24 +425,9 @@ async def delete_rating(
             detail="평가 작성자만 삭제할 수 있습니다.",
         )
 
-    # 모구 게시물 조회 (기한 확인용)
-    mogu_post_query = select(MoguPost).where(MoguPost.id == post_id)
-    mogu_post_result = await session.execute(mogu_post_query)
-    mogu_post = mogu_post_result.scalar_one_or_none()
-
-    if not mogu_post:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="모구 게시물을 찾을 수 없습니다.",
-        )
-
-    # 평가 삭제 기한 확인
-    is_within_deadline, _ = await _check_rating_deadline(mogu_post)
-    if not is_within_deadline:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"평가 삭제 기한이 지났습니다. (거래 완료 후 {RATING_DEADLINE_DAYS}일 이내)",
-        )
+    # 모구 게시물 조회 및 기한 확인
+    mogu_post = await _validate_mogu_post_for_rating(post_id, session)
+    await _validate_rating_deadline(mogu_post, "평가 삭제")
 
     # 평가 삭제
     await session.delete(rating)
@@ -520,23 +507,13 @@ async def get_reviewable_users(
 ) -> ReviewableUsersResponse:
     """현재 사용자가 리뷰할 수 있는 사용자 목록을 조회합니다."""
 
-    # 게시물 조회 (user 관계 포함)
-    mogu_post = await _get_mogu_post_with_relations(post_id, session)
-
-    # 모구 완료 상태 확인
-    if mogu_post.status != "completed":
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="완료된 모구에만 평가를 작성할 수 있습니다.",
-        )
+    # 게시물 조회 (user 관계 포함) 및 상태 확인
+    mogu_post = await _validate_mogu_post_for_rating(
+        post_id, session, include_user_relation=True
+    )
 
     # 평가 작성 기한 확인
-    is_within_deadline, deadline_info = await _check_rating_deadline(mogu_post)
-    if not is_within_deadline:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"평가 작성 기한이 지났습니다. (거래 완료 후 {RATING_DEADLINE_DAYS}일 이내)",
-        )
+    await _validate_rating_deadline(mogu_post, "평가 작성")
 
     # 모구장인지 확인
     is_mogu_leader = mogu_post.user_id == current_user.id
