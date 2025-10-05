@@ -194,14 +194,16 @@ async def get_mogu_posts(
     if params.status:
         query = query.where(MoguPost.status == params.status)
 
-    # 거리 기반 필터링 (PostGIS 사용) - 이제 필수 파라미터
-    query = query.where(
-        func.ST_DWithin(
-            MoguPost.mogu_spot,
-            func.ST_SetSRID(func.ST_MakePoint(params.longitude, params.latitude), 4326),
-            params.radius * 1000,  # km를 m로 변환
+        # 거리 기반 필터링 (PostGIS 사용) - 이제 필수 파라미터
+        query = query.where(
+            func.ST_DWithin(
+                MoguPost.mogu_spot,
+                func.ST_SetSRID(
+                    func.ST_MakePoint(params.longitude, params.latitude), 4326
+                ),
+                params.radius * 1000,  # km를 m로 변환
+            )
         )
-    )
 
     # 정렬 적용
     if params.sort == "recent":
@@ -480,28 +482,11 @@ async def get_mogu_post(
         mogu_post.questions_answers
     )
 
-    # 평가 관련 정보 구성 (완료된 모구만)
-    rating_info = None
-    if mogu_post.status == "completed":
-        # 평가 작성 기한 확인
-        is_within_deadline, deadline_info = await _check_rating_deadline(mogu_post)
-
-        # 평가 완료 여부 확인
-        all_ratings_completed, completion_info = await _check_rating_completion(
-            mogu_post, session
-        )
-        rating_info = {
-            "can_rate": is_within_deadline and not all_ratings_completed,
-            "deadline_info": deadline_info,
-            "completion_info": completion_info,
-        }
-
     return MoguPostResponse.from_mogu_post(
         mogu_post=mogu_post,
         my_participation=my_participation,
         is_favorited=is_favorited,
         questions_answers=questions_answers,
-        rating_info=rating_info,
     )
 
 

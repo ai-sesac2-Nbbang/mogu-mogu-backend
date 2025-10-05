@@ -260,7 +260,6 @@ class MoguPostResponse(BaseResponse):
     my_participation: dict[str, Any] | None = None
     is_favorited: bool | None = None
     questions_answers: list[dict[str, Any]] | None = None
-    rating_info: dict[str, Any] | None = None
 
     @classmethod
     def from_mogu_post(
@@ -269,7 +268,6 @@ class MoguPostResponse(BaseResponse):
         my_participation: dict[str, Any] | None = None,
         is_favorited: bool = False,
         questions_answers: list[dict[str, Any]] | None = None,
-        rating_info: dict[str, Any] | None = None,
     ) -> "MoguPostResponse":
         """MoguPost 모델로부터 MoguPostResponse를 생성합니다."""
         # Shapely를 사용한 위도/경도 추출
@@ -310,7 +308,6 @@ class MoguPostResponse(BaseResponse):
             my_participation=my_participation,
             is_favorited=is_favorited,
             questions_answers=questions_answers,
-            rating_info=rating_info,
         )
 
 
