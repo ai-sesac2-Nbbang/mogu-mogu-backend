@@ -1,6 +1,7 @@
 from datetime import datetime
+from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from fastapi import status as http_status
 from geoalchemy2.shape import from_shape
 from shapely.geometry import Point
@@ -8,7 +9,7 @@ from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.api import api_messages, deps
+from app.api import deps
 from app.api.common import (
     _build_mogu_post_basic_data,
     _calculate_pagination_info,
@@ -279,7 +280,18 @@ async def get_mogu_posts(
     description="내가 작성한 게시물 목록",
 )
 async def get_my_posts(
-    status: str | None = None,
+    status: (
+        Literal[
+            "draft",
+            "recruiting",
+            "locked",
+            "purchasing",
+            "distributing",
+            "completed",
+            "canceled",
+        ]
+        | None
+    ) = None,
     page: int = 1,
     size: int = 20,
     current_user: User = Depends(deps.get_current_user),
@@ -296,14 +308,7 @@ async def get_my_posts(
 
     # 상태 필터 적용
     if status:
-        try:
-            status_enum = PostStatusEnum(status)
-            query = query.where(MoguPost.status == status_enum)
-        except ValueError:
-            raise HTTPException(
-                status_code=http_status.HTTP_400_BAD_REQUEST,
-                detail=api_messages.INVALID_STATUS_VALUE,
-            )
+        query = query.where(MoguPost.status == status)
 
     # 정렬 (최신순)
     query = query.order_by(desc(MoguPost.created_at))
@@ -352,7 +357,10 @@ async def get_my_posts(
     description="내가 참여한 게시물 목록",
 )
 async def get_my_participations(
-    status: str | None = None,
+    status: (
+        Literal["applied", "accepted", "rejected", "canceled", "no_show", "fulfilled"]
+        | None
+    ) = None,
     page: int = 1,
     size: int = 20,
     current_user: User = Depends(deps.get_current_user),
@@ -370,14 +378,7 @@ async def get_my_participations(
 
     # 상태 필터 적용
     if status:
-        try:
-            status_enum = ParticipationStatusEnum(status)
-            query = query.where(Participation.status == status_enum)
-        except ValueError:
-            raise HTTPException(
-                status_code=http_status.HTTP_400_BAD_REQUEST,
-                detail="Invalid participation status value",
-            )
+        query = query.where(Participation.status == status)
 
     # 정렬 (참여 신청일 최신순)
     query = query.order_by(desc(Participation.applied_at))
