@@ -184,9 +184,6 @@ class User(Base):
     favorites: Mapped[list["MoguFavorite"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
-    keyword_stats: Mapped[list["UserKeywordStats"]] = relationship(
-        back_populates="user", cascade="all, delete-orphan"
-    )
 
 
 class RefreshToken(Base):
@@ -426,31 +423,4 @@ class RatingKeywordMaster(Base):
             values_callable=lambda x: [e.value for e in x],
         ),
         nullable=False,
-    )
-
-    # 관계
-    user_keyword_stats: Mapped[list["UserKeywordStats"]] = relationship(
-        back_populates="keyword_master"
-    )
-
-
-class UserKeywordStats(Base):
-    """사용자별 키워드 통계"""
-
-    __tablename__ = "user_keyword_stats"
-
-    user_id: Mapped[str] = mapped_column(
-        ForeignKey("app_user.id", ondelete="CASCADE"), primary_key=True
-    )
-    keyword_code: Mapped[str] = mapped_column(
-        ForeignKey("rating_keyword_master.code", ondelete="CASCADE"), primary_key=True
-    )
-    count: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
-    last_updated: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, server_default=func.now()
-    )
-
-    user: Mapped["User"] = relationship(back_populates="keyword_stats")
-    keyword_master: Mapped["RatingKeywordMaster"] = relationship(
-        back_populates="user_keyword_stats"
     )

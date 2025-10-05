@@ -226,20 +226,6 @@ Table rating_keyword_master {
   Note: '평가 키워드 마스터 데이터'
 }
 
-Table user_keyword_stats {
-  user_id      uuid        [not null]
-  keyword_code text        [not null, note: 'rating_keyword_master.code 참조']
-  count        int         [not null, default: 0]
-  last_updated timestamptz [not null, default: `now()`]
-
-  Note: '사용자별 키워드 통계'
-
-  Indexes {
-    (user_id, keyword_code) [pk]
-    user_id [name: 'idx_user_keyword_stats_user_id']
-    keyword_code [name: 'idx_user_keyword_stats_keyword_code']
-  }
-}
 
 /* ---------- Relations ---------- */
 Ref: refresh_token.user_id > app_user.id
@@ -264,5 +250,3 @@ Ref: rating.reviewee_id  > app_user.id
 Ref: mogu_favorite.user_id > app_user.id
 Ref: mogu_favorite.mogu_post_id > mogu_post.id
 
-Ref: user_keyword_stats.user_id > app_user.id
-Ref: user_keyword_stats.keyword_code > rating_keyword_master.code

@@ -6,12 +6,20 @@
 """
 
 from .post_utils import (
+    _check_favorite_status,
     _check_post_permissions,
+    _extract_thumbnail_image,
+    _get_favorite_count,
     _get_mogu_post,
     _get_mogu_post_with_relations,
+    _get_user_participation_status,
     _validate_post_status_for_deletion,
 )
-from .validation_utils import _check_qa_activity_allowed
+from .validation_utils import (
+    _check_qa_activity_allowed,
+    _check_user_participation_status,
+    _validate_rating_permissions,
+)
 
 __all__ = [
     # Post utilities
@@ -19,6 +27,12 @@ __all__ = [
     "_get_mogu_post",
     "_get_mogu_post_with_relations",
     "_validate_post_status_for_deletion",
+    "_get_user_participation_status",
+    "_check_favorite_status",
+    "_get_favorite_count",
+    "_extract_thumbnail_image",
     # Validation utilities
     "_check_qa_activity_allowed",
+    "_check_user_participation_status",
+    "_validate_rating_permissions",
 ]
