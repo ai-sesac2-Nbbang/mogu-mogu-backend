@@ -6,8 +6,12 @@
 """
 
 from .post_utils import (
+    MoguPostBasicData,
+    _build_mogu_post_basic_data,
+    _calculate_pagination_info,
     _check_favorite_status,
     _check_post_permissions,
+    _execute_paginated_query,
     _extract_thumbnail_image,
     _get_favorite_count,
     _get_mogu_post,
@@ -23,7 +27,10 @@ from .validation_utils import (
 
 __all__ = [
     # Post utilities
+    "_build_mogu_post_basic_data",
+    "_calculate_pagination_info",
     "_check_post_permissions",
+    "_execute_paginated_query",
     "_get_mogu_post",
     "_get_mogu_post_with_relations",
     "_validate_post_status_for_deletion",
@@ -31,6 +38,8 @@ __all__ = [
     "_check_favorite_status",
     "_get_favorite_count",
     "_extract_thumbnail_image",
+    # Types
+    "MoguPostBasicData",
     # Validation utilities
     "_check_qa_activity_allowed",
     "_check_user_participation_status",

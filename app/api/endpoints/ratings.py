@@ -1,5 +1,4 @@
 from datetime import datetime, timedelta
-from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import and_, select
@@ -17,6 +16,7 @@ from app.core.database_session import get_async_session
 from app.models import MoguPost, Participation, Rating, RatingKeywordMaster, User
 from app.schemas.requests import RatingCreateRequest, RatingUpdateRequest
 from app.schemas.responses import (
+    DeadlineInfo,
     RatingKeywordListResponse,
     RatingKeywordMasterResponse,
     RatingResponse,
@@ -40,7 +40,7 @@ RATING_DEADLINE_DAYS = 3
 
 async def _check_rating_deadline(
     mogu_post: MoguPost,
-) -> tuple[bool, dict[str, Any] | None]:
+) -> tuple[bool, DeadlineInfo | None]:
     """평가 작성 기한을 확인합니다."""
 
     # 모구 날짜를 거래 완료 날짜로 사용
@@ -60,7 +60,7 @@ async def _check_rating_deadline(
 
     is_within_deadline = now <= deadline
 
-    deadline_info = {
+    deadline_info: DeadlineInfo = {
         "completed_at": completed_at.isoformat(),
         "deadline": deadline.isoformat(),
         "remaining_hours": max(0, int((deadline - now).total_seconds() / 3600)),
@@ -102,7 +102,7 @@ async def _validate_rating_deadline(mogu_post: MoguPost, action: str = "평가")
 async def _check_rating_completion(
     mogu_post: MoguPost,
     session: AsyncSession,
-) -> tuple[bool, dict[str, Any]]:
+) -> bool:
     """모든 필요한 평가가 완료되었는지 확인합니다."""
 
     # 1. 모구장과 모든 평가 대상 참여자 조회 (fulfilled + no_show)
@@ -156,7 +156,7 @@ async def _check_rating_completion(
         )
 
     # 5. 완료 여부 확인
-    all_ratings_completed = True
+    all_ratings_completed: bool = True
     missing_ratings = []
 
     for required_rating in required_ratings:
@@ -170,22 +170,7 @@ async def _check_rating_completion(
             all_ratings_completed = False
             missing_ratings.append(required_rating)
 
-    # 6. 완료 정보 구성
-    completion_info = {
-        "is_all_ratings_completed": all_ratings_completed,
-        "total_required_ratings": len(required_ratings),
-        "total_completed_ratings": len(completed_ratings),
-        "completion_percentage": (
-            round((len(completed_ratings) / len(required_ratings)) * 100, 1)
-            if required_ratings
-            else 100
-        ),
-        "missing_ratings_count": len(missing_ratings),
-        "participants_count": len(fulfilled_participants),
-        "leader_id": mogu_leader_id,
-    }
-
-    return all_ratings_completed, completion_info
+    return all_ratings_completed
 
 
 async def _validate_rating_target(

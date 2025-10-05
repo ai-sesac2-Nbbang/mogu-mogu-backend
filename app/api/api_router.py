@@ -3,6 +3,7 @@ from fastapi import APIRouter
 from app.api import api_messages
 from app.api.endpoints import (
     auth,
+    favorites,
     mogu_posts,
     participations,
     questions,
@@ -39,6 +40,7 @@ api_router = APIRouter(
     }
 )
 api_router.include_router(users.router, prefix="/users", tags=["users"])
+api_router.include_router(favorites.router, prefix="/mogu-posts", tags=["favorites"])
 api_router.include_router(mogu_posts.router, prefix="/mogu-posts", tags=["mogu-posts"])
 api_router.include_router(
     participations.router, prefix="/mogu-posts", tags=["participations"]

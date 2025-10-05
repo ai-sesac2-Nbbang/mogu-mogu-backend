@@ -2,7 +2,7 @@
 게시물 관련 공통 유틸리티 함수들입니다.
 """
 
-from typing import Any
+from typing import Any, TypedDict
 
 from fastapi import HTTPException
 from fastapi import status as http_status
@@ -13,6 +13,14 @@ from sqlalchemy.orm import selectinload
 from app.api import api_messages
 from app.enums import PostStatusEnum
 from app.models import MoguFavorite, MoguPost, Participation, User
+from app.schemas.responses import PaginationInfo, ParticipationInfo
+
+
+class MoguPostBasicData(TypedDict):
+    """게시물 기본 데이터 타입"""
+
+    favorite_count: int
+    thumbnail_image: str | None
 
 
 async def _get_mogu_post(post_id: str, session: AsyncSession) -> MoguPost:
@@ -80,7 +88,7 @@ async def _validate_post_status_for_deletion(mogu_post: MoguPost) -> None:
 
 async def _get_user_participation_status(
     post_id: str, user_id: str, session: AsyncSession
-) -> dict[str, Any] | None:
+) -> ParticipationInfo | None:
     """사용자의 참여 상태를 조회합니다."""
     participation_query = select(Participation).where(
         and_(
@@ -94,7 +102,12 @@ async def _get_user_participation_status(
     if participation:
         return {
             "status": participation.status,
-            "joined_at": participation.applied_at,
+            "applied_at": participation.applied_at.isoformat(),
+            "decided_at": (
+                participation.decided_at.isoformat()
+                if participation.decided_at
+                else None
+            ),
         }
     return None
 
@@ -136,3 +149,46 @@ def _extract_thumbnail_image(post: MoguPost) -> str | None:
     else:
         # 썸네일이 없으면 첫 번째 이미지 사용
         return post.images[0].image_url
+
+
+async def _calculate_pagination_info(
+    page: int, size: int, total: int
+) -> PaginationInfo:
+    """페이지네이션 정보를 계산합니다."""
+    return {
+        "page": page,
+        "limit": size,
+        "total": total,
+        "total_pages": (total + size - 1) // size,
+    }
+
+
+async def _execute_paginated_query(
+    query: Any, page: int, size: int, session: AsyncSession
+) -> tuple[Any, int]:
+    """페이지네이션이 적용된 쿼리를 실행하고 결과와 총 개수를 반환합니다."""
+    # 전체 개수 조회
+    count_query = select(func.count()).select_from(query.subquery())
+    count_result = await session.execute(count_query)
+    total = count_result.scalar() or 0
+
+    # 페이지네이션 적용
+    offset = (page - 1) * size
+    query = query.offset(offset).limit(size)
+
+    # 쿼리 실행
+    result = await session.execute(query)
+    return result, total
+
+
+async def _build_mogu_post_basic_data(
+    post: MoguPost, session: AsyncSession
+) -> MoguPostBasicData:
+    """게시물의 기본 데이터(favorite_count, thumbnail_image)를 구성합니다."""
+    favorite_count = await _get_favorite_count(post.id, session)
+    thumbnail_image = _extract_thumbnail_image(post)
+
+    return {
+        "favorite_count": favorite_count,
+        "thumbnail_image": thumbnail_image,
+    }
