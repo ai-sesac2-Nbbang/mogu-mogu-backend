@@ -215,6 +215,7 @@ class MoguPost(Base):
     title: Mapped[str] = mapped_column(Text, nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     price: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    labor_fee: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
     category: Mapped[str] = mapped_column(
         SQLEnum(
             CategoryEnum,
