@@ -8,7 +8,7 @@ from sqlalchemy.orm import selectinload
 from app.api import deps
 from app.api.common import _get_mogu_post
 from app.core.database_session import get_async_session
-from app.models import Rating, RatingKeywordMaster, User
+from app.models import MoguPost, Participation, Rating, RatingKeywordMaster, User
 from app.schemas.requests import RatingCreateRequest, RatingUpdateRequest
 from app.schemas.responses import (
     RatingKeywordListResponse,
@@ -20,6 +20,70 @@ from app.schemas.responses import (
 )
 
 router = APIRouter()
+
+
+async def _validate_rating_permissions(
+    mogu_post: MoguPost,
+    current_user: User,
+    reviewee_id: str,
+    session: AsyncSession,
+) -> None:
+    """평가 권한 및 대상 유효성을 검증합니다."""
+
+    # 1. 자기 자신에게 평가하는 것 방지
+    if current_user.id == reviewee_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="자기 자신에게는 평가를 작성할 수 없습니다.",
+        )
+
+    # 2. 모구장인지 확인
+    is_mogu_leader = mogu_post.user_id == current_user.id
+
+    # 3. 모구러인지 확인 (참여 상태가 accepted인 경우만)
+    participation_query = select(Participation).where(
+        and_(
+            Participation.mogu_post_id == mogu_post.id,
+            Participation.user_id == current_user.id,
+            Participation.status == "accepted",
+        )
+    )
+    participation_result = await session.execute(participation_query)
+    participation = participation_result.scalar_one_or_none()
+    is_participant = participation is not None
+
+    # 4. 평가 권한 확인
+    if not is_mogu_leader and not is_participant:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="모구장 또는 참여자만 평가를 작성할 수 있습니다.",
+        )
+
+    # 5. 평가 대상 유효성 확인
+    if is_mogu_leader:
+        # 모구장이 평가할 때: reviewee_id가 해당 모구의 참여자여야 함
+        target_participation_query = select(Participation).where(
+            and_(
+                Participation.mogu_post_id == mogu_post.id,
+                Participation.user_id == reviewee_id,
+                Participation.status == "accepted",
+            )
+        )
+        target_participation_result = await session.execute(target_participation_query)
+        target_participation = target_participation_result.scalar_one_or_none()
+
+        if not target_participation:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="해당 사용자는 이 모구의 참여자가 아닙니다.",
+            )
+    elif not is_mogu_leader:
+        # 모구러가 평가할 때: reviewee_id가 해당 모구의 모구장이어야 함
+        if reviewee_id != mogu_post.user_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="참여자는 모구장에게만 평가를 작성할 수 있습니다.",
+            )
 
 
 async def _get_rating(
@@ -70,12 +134,8 @@ async def create_rating(
             detail="완료된 모구에만 평가를 작성할 수 있습니다.",
         )
 
-    # 자기 자신에게 평가하는 것 방지
-    if current_user.id == data.reviewee_id:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="자기 자신에게는 평가를 작성할 수 없습니다.",
-        )
+    # 평가 권한 및 대상 유효성 검증
+    await _validate_rating_permissions(mogu_post, current_user, data.reviewee_id, session)
 
     # 중복 평가 방지
     existing_rating_query = select(Rating).where(
