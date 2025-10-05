@@ -204,6 +204,7 @@ class AnswerUpdateRequest(BaseRequest):
 class RatingCreateRequest(BaseRequest):
     """평가 작성"""
 
+    mogu_post_id: str
     reviewee_id: str
     stars: int
     keywords: list[str] | None = None

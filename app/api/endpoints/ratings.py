@@ -14,7 +14,6 @@ from app.schemas.requests import RatingCreateRequest, RatingUpdateRequest
 from app.schemas.responses import (
     RatingKeywordListResponse,
     RatingKeywordMasterResponse,
-    RatingListResponse,
     RatingResponse,
     RatingWithReviewerResponse,
     ReviewableUserResponse,
@@ -22,7 +21,11 @@ from app.schemas.responses import (
     UserKeywordStatsResponse,
 )
 
+# 게시물 관련 평가 API 라우터
 router = APIRouter()
+
+# 독립적인 평가 API 라우터
+independent_router = APIRouter()
 
 # rating-keywords 전용 라우터 (인증 불필요)
 keywords_router = APIRouter()
@@ -287,27 +290,24 @@ async def _get_rating_by_id(
     return rating
 
 
-@router.post(
-    "/{post_id}/ratings",
+@independent_router.post(
+    "/ratings",
     response_model=RatingResponse,
     status_code=status.HTTP_201_CREATED,
     description="평가 작성",
 )
 async def create_rating(
-    post_id: str,
     data: RatingCreateRequest,
     current_user: User = Depends(deps.get_current_user),
     session: AsyncSession = Depends(get_async_session),
 ) -> RatingResponse:
-    """모구 게시물에 평가를 작성합니다."""
+    """평가를 작성합니다."""
 
-    # 게시물 조회 및 상태 확인
-    mogu_post = await _validate_mogu_post_for_rating(post_id, session)
-
-    # 평가 작성 기한 확인
+    # 모구 게시물 조회 및 검증
+    mogu_post = await _validate_mogu_post_for_rating(data.mogu_post_id, session)
     await _validate_rating_deadline(mogu_post, "평가 작성")
 
-    # 평가 권한 및 대상 유효성 검증
+    # 평가 권한 검증
     await _validate_rating_permissions(
         mogu_post, current_user, data.reviewee_id, session
     )
@@ -315,7 +315,7 @@ async def create_rating(
     # 중복 평가 방지
     existing_rating_query = select(Rating).where(
         and_(
-            Rating.mogu_post_id == post_id,
+            Rating.mogu_post_id == data.mogu_post_id,
             Rating.reviewer_id == current_user.id,
             Rating.reviewee_id == data.reviewee_id,
         )
@@ -331,7 +331,7 @@ async def create_rating(
 
     # 평가 생성
     rating = Rating(
-        mogu_post_id=post_id,
+        mogu_post_id=data.mogu_post_id,
         reviewer_id=current_user.id,
         reviewee_id=data.reviewee_id,
         stars=data.stars,
@@ -345,42 +345,7 @@ async def create_rating(
     return RatingResponse.from_rating(rating)
 
 
-@router.get(
-    "/{post_id}/ratings",
-    response_model=RatingListResponse,
-    description="평가 목록 조회",
-)
-async def get_ratings(
-    post_id: str,
-    current_user: User | None = Depends(deps.get_current_user_optional),
-    session: AsyncSession = Depends(get_async_session),
-) -> RatingListResponse:
-    """모구 게시물의 평가 목록을 조회합니다."""
-
-    # 게시물 존재 확인
-    await _get_mogu_post(post_id, session)
-
-    # 평가 목록 조회
-    ratings_query = (
-        select(Rating)
-        .options(
-            selectinload(Rating.reviewer),
-        )
-        .where(Rating.mogu_post_id == post_id)
-        .order_by(Rating.created_at.desc())
-    )
-
-    ratings_result = await session.execute(ratings_query)
-    ratings = ratings_result.scalars().all()
-
-    ratings_data = [
-        RatingWithReviewerResponse.from_rating(rating) for rating in ratings
-    ]
-
-    return RatingListResponse(items=ratings_data)
-
-
-@router.get(
+@independent_router.get(
     "/ratings/{rating_id}",
     response_model=RatingWithReviewerResponse,
     description="평가 상세 조회",
@@ -399,13 +364,12 @@ async def get_rating(
     return RatingWithReviewerResponse.from_rating(rating)
 
 
-@router.patch(
-    "/{post_id}/ratings/{rating_id}",
+@independent_router.patch(
+    "/ratings/{rating_id}",
     response_model=RatingResponse,
     description="평가 수정",
 )
 async def update_rating(
-    post_id: str,
     rating_id: str,
     data: RatingUpdateRequest,
     current_user: User = Depends(deps.get_current_user),
@@ -414,7 +378,7 @@ async def update_rating(
     """평가를 수정합니다 (평가 작성자만)."""
 
     # 평가 조회
-    rating = await _get_rating(post_id, rating_id, session)
+    rating = await _get_rating_by_id(rating_id, session)
 
     # 평가 작성자 권한 확인
     if rating.reviewer_id != current_user.id:
@@ -424,7 +388,7 @@ async def update_rating(
         )
 
     # 모구 게시물 조회 및 기한 확인
-    mogu_post = await _validate_mogu_post_for_rating(post_id, session)
+    mogu_post = await _validate_mogu_post_for_rating(rating.mogu_post_id, session)
     await _validate_rating_deadline(mogu_post, "평가 수정")
 
     # 평가 업데이트
@@ -439,13 +403,12 @@ async def update_rating(
     return RatingResponse.from_rating(rating)
 
 
-@router.delete(
-    "/{post_id}/ratings/{rating_id}",
+@independent_router.delete(
+    "/ratings/{rating_id}",
     status_code=status.HTTP_204_NO_CONTENT,
     description="평가 삭제",
 )
 async def delete_rating(
-    post_id: str,
     rating_id: str,
     current_user: User = Depends(deps.get_current_user),
     session: AsyncSession = Depends(get_async_session),
@@ -453,7 +416,7 @@ async def delete_rating(
     """평가를 삭제합니다 (평가 작성자만)."""
 
     # 평가 조회
-    rating = await _get_rating(post_id, rating_id, session)
+    rating = await _get_rating_by_id(rating_id, session)
 
     # 평가 작성자 권한 확인
     if rating.reviewer_id != current_user.id:
@@ -463,7 +426,7 @@ async def delete_rating(
         )
 
     # 모구 게시물 조회 및 기한 확인
-    mogu_post = await _validate_mogu_post_for_rating(post_id, session)
+    mogu_post = await _validate_mogu_post_for_rating(rating.mogu_post_id, session)
     await _validate_rating_deadline(mogu_post, "평가 삭제")
 
     # 평가 삭제

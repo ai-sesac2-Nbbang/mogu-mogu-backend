@@ -45,4 +45,5 @@ api_router.include_router(
 )
 api_router.include_router(questions.router, prefix="/mogu-posts", tags=["questions"])
 api_router.include_router(ratings.router, prefix="/mogu-posts", tags=["ratings"])
+api_router.include_router(ratings.independent_router, prefix="", tags=["ratings"])
 api_router.include_router(ratings.keywords_router, prefix="", tags=["rating-keywords"])
