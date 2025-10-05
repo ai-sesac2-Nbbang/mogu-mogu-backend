@@ -5,7 +5,14 @@ from geoalchemy2.shape import to_shape
 from pydantic import BaseModel, ConfigDict, EmailStr
 
 if TYPE_CHECKING:
-    from app.models import MoguPost, Participation, QuestionAnswer, User
+    from app.models import (
+        MoguPost,
+        Participation,
+        QuestionAnswer,
+        Rating,
+        RatingKeywordMaster,
+        User,
+    )
 
 
 class BaseResponse(BaseModel):
@@ -118,6 +125,19 @@ class RatingKeywordMasterResponse(BaseResponse):
     name_kr: str
     type: str  # positive 또는 negative
     created_at: datetime
+
+    @classmethod
+    def from_keyword_master(
+        cls, keyword: "RatingKeywordMaster"
+    ) -> "RatingKeywordMasterResponse":
+        """RatingKeywordMaster 모델로부터 RatingKeywordMasterResponse를 생성합니다."""
+        return cls(
+            id=keyword.id,
+            code=keyword.code,
+            name_kr=keyword.name_kr,
+            type=keyword.type,
+            created_at=keyword.created_at,
+        )
 
 
 class UserKeywordStatsResponse(BaseResponse):
@@ -393,3 +413,72 @@ class QuestionAnswerConverter:
                 "profile_image_url": question.answerer.profile_image_url,
             }
         return None
+
+
+# 평가 관련 Response 스키마
+class RatingResponse(BaseResponse):
+    """평가 응답"""
+
+    id: str
+    mogu_post_id: str
+    reviewer_id: str
+    reviewee_id: str
+    stars: int
+    keywords: list[str] | None = None
+    created_at: datetime
+
+    @classmethod
+    def from_rating(cls, rating: "Rating") -> "RatingResponse":
+        """Rating 모델로부터 RatingResponse를 생성합니다."""
+        return cls(
+            id=rating.id,
+            mogu_post_id=rating.mogu_post_id,
+            reviewer_id=rating.reviewer_id,
+            reviewee_id=rating.reviewee_id,
+            stars=rating.stars,
+            keywords=rating.keywords,
+            created_at=rating.created_at,
+        )
+
+
+class RatingWithReviewerResponse(BaseResponse):
+    """평가자 정보가 포함된 평가 응답"""
+
+    id: str
+    mogu_post_id: str
+    reviewer_id: str
+    reviewee_id: str
+    stars: int
+    keywords: list[str] | None = None
+    created_at: datetime
+    reviewer: dict[str, str | None]
+
+    @classmethod
+    def from_rating(cls, rating: "Rating") -> "RatingWithReviewerResponse":
+        """Rating 모델로부터 RatingWithReviewerResponse를 생성합니다."""
+        return cls(
+            id=rating.id,
+            mogu_post_id=rating.mogu_post_id,
+            reviewer_id=rating.reviewer_id,
+            reviewee_id=rating.reviewee_id,
+            stars=rating.stars,
+            keywords=rating.keywords,
+            created_at=rating.created_at,
+            reviewer={
+                "id": rating.reviewer.id,
+                "nickname": rating.reviewer.nickname,
+                "profile_image_url": rating.reviewer.profile_image_url,
+            },
+        )
+
+
+class RatingListResponse(BaseResponse):
+    """평가 목록 응답"""
+
+    items: list[RatingWithReviewerResponse]
+
+
+class RatingKeywordListResponse(BaseResponse):
+    """평가 키워드 목록 응답"""
+
+    keywords: list[RatingKeywordMasterResponse]

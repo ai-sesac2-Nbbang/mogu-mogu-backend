@@ -198,3 +198,19 @@ class AnswerUpdateRequest(BaseRequest):
     """답변 수정"""
 
     answer: str
+
+
+# 평가 관련 Request 스키마
+class RatingCreateRequest(BaseRequest):
+    """평가 작성"""
+
+    reviewee_id: str
+    stars: int
+    keywords: list[str] | None = None
+
+
+class RatingUpdateRequest(BaseRequest):
+    """평가 수정"""
+
+    stars: int | None = None
+    keywords: list[str] | None = None
