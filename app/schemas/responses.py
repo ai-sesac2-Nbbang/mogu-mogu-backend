@@ -13,6 +13,7 @@ if TYPE_CHECKING:
         RatingKeywordMaster,
         User,
     )
+    from app.schemas.types import RatingKeywordCodeLiteral
 
 
 class PaginationInfo(TypedDict):
@@ -243,15 +244,6 @@ class RatingStatusResponse(BaseResponse):
     reviewable_users: list[ReviewableUserResponse] | None = None
     reason: str | None = None
     deadline_info: DeadlineInfo | None = None
-
-
-class UserKeywordStatsSummaryResponse(BaseResponse):
-    user_id: str
-    positive_keywords: list[dict[str, Any]]
-    negative_keywords: list[dict[str, Any]]
-    total_positive_count: int
-    total_negative_count: int
-    last_updated: datetime
 
 
 # 모구 게시물 관련 Response 스키마
@@ -544,7 +536,7 @@ class RatingResponse(BaseResponse):
     reviewer_id: str
     reviewee_id: str
     stars: int
-    keywords: list[str] | None = None
+    keywords: "list[RatingKeywordCodeLiteral] | None" = None
     created_at: datetime
 
     @classmethod
@@ -569,7 +561,7 @@ class RatingWithReviewerResponse(BaseResponse):
     reviewer_id: str
     reviewee_id: str
     stars: int
-    keywords: list[str] | None = None
+    keywords: "list[RatingKeywordCodeLiteral] | None" = None
     created_at: datetime
     reviewer: dict[str, str | None]
 

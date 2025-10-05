@@ -2,6 +2,17 @@ from datetime import date, datetime
 
 from pydantic import BaseModel, EmailStr, field_validator
 
+from app.schemas.types import (
+    CategoryLiteral,
+    GenderLiteral,
+    HouseholdSizeLiteral,
+    MarketLiteral,
+    ParticipationStatusLiteral,
+    PostStatusLiteral,
+    RatingKeywordCodeLiteral,
+    SortLiteral,
+)
+
 # 상수
 WISH_TIMES_LENGTH = 24
 MIN_TARGET_COUNT = 1
@@ -41,12 +52,12 @@ class UserUpdateRequest(BaseRequest):
     name: str | None = None
     phone_number: str | None = None
     birth_date: date | None = None
-    gender: str | None = None  # "male" | "female" | "other"
+    gender: GenderLiteral | None = None
 
     # 관심사
-    interested_categories: list[str] | None = None  # CategoryEnum 값들
-    household_size: str | None = None  # HouseholdSizeEnum 값
-    wish_markets: list[str] | None = None  # MarketEnum 값들
+    interested_categories: list[CategoryLiteral] | None = None
+    household_size: HouseholdSizeLiteral | None = None
+    wish_markets: list[MarketLiteral] | None = None
     wish_times: list[int] | None = None  # 24시간 배열 (0 또는 1)
 
     @field_validator("wish_times")
@@ -102,8 +113,8 @@ class MoguPostCreateRequest(BaseRequest):
     description: str
     price: int
     labor_fee: int = 0
-    category: str  # CategoryEnum 값
-    mogu_market: str  # MarketEnum 값
+    category: CategoryLiteral
+    mogu_market: MarketLiteral
     mogu_spot: MoguSpotRequest
     mogu_datetime: datetime
     target_count: int
@@ -131,12 +142,12 @@ class MoguPostUpdateRequest(BaseRequest):
     description: str | None = None
     price: int | None = None
     labor_fee: int | None = None
-    category: str | None = None
-    mogu_market: str | None = None
+    category: CategoryLiteral | None = None
+    mogu_market: MarketLiteral | None = None
     mogu_spot: MoguSpotRequest | None = None
     mogu_datetime: datetime | None = None
     target_count: int | None = None
-    status: str | None = None  # PostStatusEnum 값
+    status: PostStatusLiteral | None = None
     images: list[MoguPostImageRequest] | None = None
 
     @field_validator("target_count")
@@ -159,10 +170,12 @@ class MoguPostListQueryParams(BaseRequest):
 
     page: int = 1
     size: int = 20
-    sort: str = "ai_recommended"
-    category: str | None = None
-    mogu_market: str | None = None
-    status: str | None = "recruiting"  # 기본값은 recruiting, None이면 모든 상태 조회
+    sort: SortLiteral = "ai_recommended"
+    category: CategoryLiteral | None = None
+    mogu_market: MarketLiteral | None = None
+    status: PostStatusLiteral | None = (
+        "recruiting"  # 기본값은 recruiting, None이면 모든 상태 조회
+    )
     latitude: float  # 필수 파라미터로 변경
     longitude: float  # 필수 파라미터로 변경
     radius: float = 3.0
@@ -172,7 +185,7 @@ class MoguPostListQueryParams(BaseRequest):
 class ParticipationStatusUpdateRequest(BaseRequest):
     """참여 상태 업데이트 (승인/거부/노쇼/완료)"""
 
-    status: str  # "accepted", "rejected", "no_show", "fulfilled"
+    status: ParticipationStatusLiteral
 
 
 # Q&A 관련 Request 스키마
@@ -209,11 +222,11 @@ class RatingCreateRequest(BaseRequest):
     mogu_post_id: str
     reviewee_id: str
     stars: int
-    keywords: list[str] | None = None
+    keywords: list[RatingKeywordCodeLiteral] | None = None
 
 
 class RatingUpdateRequest(BaseRequest):
     """평가 수정"""
 
     stars: int | None = None
-    keywords: list[str] | None = None
+    keywords: list[RatingKeywordCodeLiteral] | None = None

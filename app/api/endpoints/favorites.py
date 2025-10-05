@@ -4,7 +4,7 @@ from sqlalchemy import and_, desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.api import api_messages, deps
+from app.api import deps
 from app.api.common import (
     _build_mogu_post_basic_data,
     _calculate_pagination_info,
@@ -13,12 +13,12 @@ from app.api.common import (
     _get_mogu_post,
 )
 from app.core.database_session import get_async_session
-from app.enums import PostStatusEnum
 from app.models import MoguFavorite, MoguPost, User
 from app.schemas.responses import (
     MoguPostFavoritesPaginatedResponse,
     MoguPostListItemResponse,
 )
+from app.schemas.types import PostStatusLiteral
 
 router = APIRouter()
 
@@ -95,7 +95,7 @@ async def remove_favorite(
     description="내가 찜한 게시물 목록",
 )
 async def get_my_favorites(
-    status: str | None = None,
+    status: PostStatusLiteral | None = None,
     page: int = 1,
     size: int = 20,
     current_user: User = Depends(deps.get_current_user),
@@ -113,14 +113,7 @@ async def get_my_favorites(
 
     # 상태 필터 적용
     if status:
-        try:
-            status_enum = PostStatusEnum(status)
-            query = query.where(MoguPost.status == status_enum)
-        except ValueError:
-            raise HTTPException(
-                status_code=http_status.HTTP_400_BAD_REQUEST,
-                detail=api_messages.INVALID_STATUS_VALUE,
-            )
+        query = query.where(MoguPost.status == status)
 
     # 정렬 (최신 찜하기 순)
     query = query.order_by(desc(MoguFavorite.created_at))
