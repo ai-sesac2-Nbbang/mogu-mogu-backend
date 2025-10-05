@@ -16,6 +16,7 @@ from app.api.common import (
     _get_mogu_post_with_relations,
     _validate_post_status_for_deletion,
 )
+from app.api.endpoints.ratings import _check_rating_completion, _check_rating_deadline
 from app.core.database_session import get_async_session
 from app.enums import ParticipationStatusEnum, PostStatusEnum
 from app.models import MoguFavorite, MoguPost, MoguPostImage, Participation, User
@@ -70,6 +71,45 @@ async def _check_favorite_status(
     )
     favorite_result = await session.execute(favorite_query)
     return favorite_result.scalar_one_or_none() is not None
+
+
+async def _can_user_review_post(
+    mogu_post: MoguPost, current_user: User, session: AsyncSession
+) -> bool:
+    """사용자가 해당 게시물에 대해 리뷰를 작성할 수 있는지 확인합니다."""
+
+    # 완료된 모구만 리뷰 가능
+    if mogu_post.status != "completed":
+        return False
+
+    # 평가 작성 기한 확인
+    is_within_deadline, _ = await _check_rating_deadline(mogu_post)
+    if not is_within_deadline:
+        return False
+
+    # 모구장인지 확인
+    is_mogu_leader = mogu_post.user_id == current_user.id
+
+    # 모구러인지 확인 (fulfilled 또는 no_show 상태인 참여자)
+    participation_query = select(Participation).where(
+        and_(
+            Participation.mogu_post_id == mogu_post.id,
+            Participation.user_id == current_user.id,
+            Participation.status.in_(["fulfilled", "no_show"]),
+        )
+    )
+    participation_result = await session.execute(participation_query)
+    participation = participation_result.scalar_one_or_none()
+    is_participant = participation is not None
+
+    # 평가 권한 확인
+    if not is_mogu_leader and not is_participant:
+        return False
+
+    # 평가 완료 여부 확인
+    all_ratings_completed, _ = await _check_rating_completion(mogu_post, session)
+
+    return not all_ratings_completed
 
 
 async def _handle_post_status_change(
@@ -358,6 +398,9 @@ async def get_my_posts(
                 # 썸네일이 없으면 첫 번째 이미지 사용
                 thumbnail_image = post.images[0].image_url
 
+        # 리뷰 가능 여부 확인
+        can_review = await _can_user_review_post(post, current_user, session)
+
         posts_list.append(
             MoguPostListItemResponse(
                 id=post.id,
@@ -376,6 +419,7 @@ async def get_my_posts(
                 created_at=post.created_at,
                 thumbnail_image=thumbnail_image,
                 favorite_count=favorite_count,
+                can_review=can_review,
             )
         )
 
@@ -462,6 +506,9 @@ async def get_my_participations(
                 # 썸네일이 없으면 첫 번째 이미지 사용
                 thumbnail_image = post.images[0].image_url
 
+        # 리뷰 가능 여부 확인
+        can_review = await _can_user_review_post(post, current_user, session)
+
         posts_list.append(
             MoguPostWithParticipationResponse(
                 id=post.id,
@@ -480,6 +527,7 @@ async def get_my_participations(
                 created_at=post.created_at,
                 thumbnail_image=thumbnail_image,
                 favorite_count=favorite_count,
+                can_review=can_review,
                 # 참여 상태 정보
                 my_participation_status=participation.status,
                 my_participation_applied_at=participation.applied_at,
@@ -525,11 +573,28 @@ async def get_mogu_post(
         mogu_post.questions_answers
     )
 
+    # 평가 관련 정보 구성 (완료된 모구만)
+    rating_info = None
+    if mogu_post.status == "completed":
+        # 평가 작성 기한 확인
+        is_within_deadline, deadline_info = await _check_rating_deadline(mogu_post)
+
+        # 평가 완료 여부 확인
+        all_ratings_completed, completion_info = await _check_rating_completion(
+            mogu_post, session
+        )
+        rating_info = {
+            "can_rate": is_within_deadline and not all_ratings_completed,
+            "deadline_info": deadline_info,
+            "completion_info": completion_info,
+        }
+
     return MoguPostResponse.from_mogu_post(
         mogu_post=mogu_post,
         my_participation=my_participation,
         is_favorited=is_favorited,
         questions_answers=questions_answers,
+        rating_info=rating_info,
     )
 
 
