@@ -15,7 +15,10 @@ from app.schemas.responses import (
     RatingKeywordMasterResponse,
     RatingListResponse,
     RatingResponse,
+    RatingStatusResponse,
     RatingWithReviewerResponse,
+    ReviewableUserResponse,
+    ReviewableUsersResponse,
     UserKeywordStatsResponse,
 )
 
@@ -40,12 +43,12 @@ async def _validate_rating_permissions(
     # 2. 모구장인지 확인
     is_mogu_leader = mogu_post.user_id == current_user.id
 
-    # 3. 모구러인지 확인 (참여 상태가 accepted인 경우만)
+    # 3. 모구러인지 확인 (참여 상태가 fulfilled인 경우만)
     participation_query = select(Participation).where(
         and_(
             Participation.mogu_post_id == mogu_post.id,
             Participation.user_id == current_user.id,
-            Participation.status == "accepted",
+            Participation.status == "fulfilled",
         )
     )
     participation_result = await session.execute(participation_query)
@@ -66,7 +69,7 @@ async def _validate_rating_permissions(
             and_(
                 Participation.mogu_post_id == mogu_post.id,
                 Participation.user_id == reviewee_id,
-                Participation.status == "accepted",
+                Participation.status == "fulfilled",
             )
         )
         target_participation_result = await session.execute(target_participation_query)
@@ -135,7 +138,9 @@ async def create_rating(
         )
 
     # 평가 권한 및 대상 유효성 검증
-    await _validate_rating_permissions(mogu_post, current_user, data.reviewee_id, session)
+    await _validate_rating_permissions(
+        mogu_post, current_user, data.reviewee_id, session
+    )
 
     # 중복 평가 방지
     existing_rating_query = select(Rating).where(
@@ -328,3 +333,183 @@ async def get_user_keyword_stats(
         count=0,
         last_updated=datetime.utcnow(),
     )
+
+
+@router.get(
+    "/{post_id}/rating-status",
+    response_model=RatingStatusResponse,
+    description="평가 작성 가능 상태 확인",
+)
+async def get_rating_status(
+    post_id: str,
+    current_user: User = Depends(deps.get_current_user),
+    session: AsyncSession = Depends(get_async_session),
+) -> RatingStatusResponse:
+    """현재 사용자가 해당 모구에 대해 평가를 작성할 수 있는지 확인합니다."""
+
+    # 게시물 조회
+    mogu_post = await _get_mogu_post(post_id, session)
+
+    # 모구 완료 상태 확인
+    if mogu_post.status != "completed":
+        return RatingStatusResponse(
+            can_review=False,
+            reason="완료된 모구에만 평가를 작성할 수 있습니다.",
+        )
+
+    # 모구장인지 확인
+    is_mogu_leader = mogu_post.user_id == current_user.id
+
+    # 모구러인지 확인 (FULFILLED 상태인 참여자만)
+    participation_query = select(Participation).where(
+        and_(
+            Participation.mogu_post_id == mogu_post.id,
+            Participation.user_id == current_user.id,
+            Participation.status == "fulfilled",
+        )
+    )
+    participation_result = await session.execute(participation_query)
+    participation = participation_result.scalar_one_or_none()
+    is_participant = participation is not None
+
+    # 평가 권한 확인
+    if not is_mogu_leader and not is_participant:
+        return RatingStatusResponse(
+            can_review=False,
+            reason="모구장 또는 완료된 참여자만 평가를 작성할 수 있습니다.",
+        )
+
+    # 리뷰 가능한 사용자 목록 조회
+    reviewable_users = await _get_reviewable_users(
+        mogu_post, current_user, is_mogu_leader, session
+    )
+
+    if not reviewable_users:
+        return RatingStatusResponse(
+            can_review=False,
+            reason="평가할 수 있는 사용자가 없습니다.",
+        )
+
+    return RatingStatusResponse(
+        can_review=True,
+        reviewable_users=reviewable_users,
+    )
+
+
+@router.get(
+    "/{post_id}/reviewable-users",
+    response_model=ReviewableUsersResponse,
+    description="리뷰 가능한 사용자 목록 조회",
+)
+async def get_reviewable_users(
+    post_id: str,
+    current_user: User = Depends(deps.get_current_user),
+    session: AsyncSession = Depends(get_async_session),
+) -> ReviewableUsersResponse:
+    """현재 사용자가 리뷰할 수 있는 사용자 목록을 조회합니다."""
+
+    # 게시물 조회
+    mogu_post = await _get_mogu_post(post_id, session)
+
+    # 모구 완료 상태 확인
+    if mogu_post.status != "completed":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="완료된 모구에만 평가를 작성할 수 있습니다.",
+        )
+
+    # 모구장인지 확인
+    is_mogu_leader = mogu_post.user_id == current_user.id
+
+    # 모구러인지 확인 (FULFILLED 상태인 참여자만)
+    participation_query = select(Participation).where(
+        and_(
+            Participation.mogu_post_id == mogu_post.id,
+            Participation.user_id == current_user.id,
+            Participation.status == "fulfilled",
+        )
+    )
+    participation_result = await session.execute(participation_query)
+    participation = participation_result.scalar_one_or_none()
+    is_participant = participation is not None
+
+    # 평가 권한 확인
+    if not is_mogu_leader and not is_participant:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="모구장 또는 완료된 참여자만 평가를 작성할 수 있습니다.",
+        )
+
+    # 리뷰 가능한 사용자 목록 조회
+    reviewable_users = await _get_reviewable_users(
+        mogu_post, current_user, is_mogu_leader, session
+    )
+
+    return ReviewableUsersResponse(items=reviewable_users)
+
+
+async def _get_reviewable_users(
+    mogu_post: MoguPost,
+    current_user: User,
+    is_mogu_leader: bool,
+    session: AsyncSession,
+) -> list[ReviewableUserResponse]:
+    """리뷰 가능한 사용자 목록을 조회합니다."""
+
+    reviewable_users = []
+
+    if is_mogu_leader:
+        # 모구장이 리뷰할 수 있는 사용자: FULFILLED 상태인 참여자들
+        participations_query = (
+            select(Participation)
+            .options(selectinload(Participation.user))
+            .where(
+                and_(
+                    Participation.mogu_post_id == mogu_post.id,
+                    Participation.status == "fulfilled",
+                )
+            )
+        )
+        participations_result = await session.execute(participations_query)
+        participations = participations_result.scalars().all()
+
+        for participation in participations:
+            # 이미 평가했는지 확인
+            existing_rating_query = select(Rating).where(
+                and_(
+                    Rating.mogu_post_id == mogu_post.id,
+                    Rating.reviewer_id == current_user.id,
+                    Rating.reviewee_id == participation.user_id,
+                )
+            )
+            existing_rating_result = await session.execute(existing_rating_query)
+            existing_rating = existing_rating_result.scalar_one_or_none()
+
+            reviewable_users.append(
+                ReviewableUserResponse.from_participation(
+                    participation, is_already_rated=existing_rating is not None
+                )
+            )
+
+    else:
+        # 모구러가 리뷰할 수 있는 사용자: 모구장
+        # 이미 평가했는지 확인
+        existing_rating_query = select(Rating).where(
+            and_(
+                Rating.mogu_post_id == mogu_post.id,
+                Rating.reviewer_id == current_user.id,
+                Rating.reviewee_id == mogu_post.user_id,
+            )
+        )
+        existing_rating_result = await session.execute(existing_rating_query)
+        existing_rating = existing_rating_result.scalar_one_or_none()
+
+        reviewable_users.append(
+            ReviewableUserResponse.from_user(
+                mogu_post.user,
+                participation_status="mogu_leader",
+                is_already_rated=existing_rating is not None,
+            )
+        )
+
+    return reviewable_users

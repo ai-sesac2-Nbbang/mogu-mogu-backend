@@ -147,6 +147,62 @@ class UserKeywordStatsResponse(BaseResponse):
     last_updated: datetime
 
 
+# 프론트엔드 UI 지원을 위한 추가 Response 스키마
+class ReviewableUserResponse(BaseResponse):
+    """리뷰 가능한 사용자 응답"""
+
+    user_id: str
+    nickname: str | None = None
+    profile_image_url: str | None = None
+    participation_status: str
+    is_already_rated: bool = False
+
+    @classmethod
+    def from_participation(
+        cls,
+        participation: "Participation",
+        is_already_rated: bool = False,
+    ) -> "ReviewableUserResponse":
+        """Participation 모델로부터 ReviewableUserResponse를 생성합니다."""
+        return cls(
+            user_id=participation.user.id,
+            nickname=participation.user.nickname or "익명",
+            profile_image_url=participation.user.profile_image_url,
+            participation_status=participation.status,
+            is_already_rated=is_already_rated,
+        )
+
+    @classmethod
+    def from_user(
+        cls,
+        user: "User",
+        participation_status: str,
+        is_already_rated: bool = False,
+    ) -> "ReviewableUserResponse":
+        """User 모델로부터 ReviewableUserResponse를 생성합니다."""
+        return cls(
+            user_id=user.id,
+            nickname=user.nickname or "익명",
+            profile_image_url=user.profile_image_url,
+            participation_status=participation_status,
+            is_already_rated=is_already_rated,
+        )
+
+
+class ReviewableUsersResponse(BaseResponse):
+    """리뷰 가능한 사용자 목록 응답"""
+
+    items: list[ReviewableUserResponse]
+
+
+class RatingStatusResponse(BaseResponse):
+    """평가 상태 응답"""
+
+    can_review: bool
+    reviewable_users: list[ReviewableUserResponse] | None = None
+    reason: str | None = None
+
+
 class UserKeywordStatsSummaryResponse(BaseResponse):
     user_id: str
     positive_keywords: list[dict[str, Any]]
