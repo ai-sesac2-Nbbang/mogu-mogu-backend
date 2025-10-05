@@ -140,6 +140,7 @@ async def get_my_favorites(
                 id=post.id,
                 title=post.title,
                 price=post.price,
+                labor_fee=post.labor_fee,
                 category=post.category,
                 mogu_market=post.mogu_market,
                 mogu_datetime=post.mogu_datetime,
