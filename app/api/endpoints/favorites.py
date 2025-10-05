@@ -1,5 +1,3 @@
-from typing import Literal
-
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi import status as http_status
 from sqlalchemy import and_, desc, select
@@ -20,6 +18,7 @@ from app.schemas.responses import (
     MoguPostFavoritesPaginatedResponse,
     MoguPostListItemResponse,
 )
+from app.schemas.types import PostStatusLiteral
 
 router = APIRouter()
 
@@ -96,18 +95,7 @@ async def remove_favorite(
     description="내가 찜한 게시물 목록",
 )
 async def get_my_favorites(
-    status: (
-        Literal[
-            "draft",
-            "recruiting",
-            "locked",
-            "purchasing",
-            "distributing",
-            "completed",
-            "canceled",
-        ]
-        | None
-    ) = None,
+    status: PostStatusLiteral | None = None,
     page: int = 1,
     size: int = 20,
     current_user: User = Depends(deps.get_current_user),

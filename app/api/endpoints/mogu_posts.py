@@ -1,5 +1,4 @@
 from datetime import datetime
-from typing import Literal
 
 from fastapi import APIRouter, Depends
 from fastapi import status as http_status
@@ -41,6 +40,7 @@ from app.schemas.responses import (
     MoguPostWithParticipationResponse,
     QuestionAnswerConverter,
 )
+from app.schemas.types import ParticipationStatusLiteral, PostStatusLiteral
 
 router = APIRouter()
 
@@ -280,18 +280,7 @@ async def get_mogu_posts(
     description="내가 작성한 게시물 목록",
 )
 async def get_my_posts(
-    status: (
-        Literal[
-            "draft",
-            "recruiting",
-            "locked",
-            "purchasing",
-            "distributing",
-            "completed",
-            "canceled",
-        ]
-        | None
-    ) = None,
+    status: PostStatusLiteral | None = None,
     page: int = 1,
     size: int = 20,
     current_user: User = Depends(deps.get_current_user),
@@ -357,10 +346,7 @@ async def get_my_posts(
     description="내가 참여한 게시물 목록",
 )
 async def get_my_participations(
-    status: (
-        Literal["applied", "accepted", "rejected", "canceled", "no_show", "fulfilled"]
-        | None
-    ) = None,
+    status: ParticipationStatusLiteral | None = None,
     page: int = 1,
     size: int = 20,
     current_user: User = Depends(deps.get_current_user),

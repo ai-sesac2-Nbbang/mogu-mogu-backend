@@ -1,7 +1,17 @@
 from datetime import date, datetime
-from typing import Literal
 
 from pydantic import BaseModel, EmailStr, field_validator
+
+from app.schemas.types import (
+    CategoryLiteral,
+    GenderLiteral,
+    HouseholdSizeLiteral,
+    MarketLiteral,
+    ParticipationStatusLiteral,
+    PostStatusLiteral,
+    RatingKeywordCodeLiteral,
+    SortLiteral,
+)
 
 # 상수
 WISH_TIMES_LENGTH = 24
@@ -42,30 +52,12 @@ class UserUpdateRequest(BaseRequest):
     name: str | None = None
     phone_number: str | None = None
     birth_date: date | None = None
-    gender: Literal["male", "female", "other"] | None = None
+    gender: GenderLiteral | None = None
 
     # 관심사
-    interested_categories: (
-        list[Literal["생활용품", "식품/간식류", "패션/잡화", "뷰티/헬스케어"]] | None
-    ) = None
-    household_size: Literal["1인", "2인", "3인", "4인 이상"] | None = None
-    wish_markets: (
-        list[
-            Literal[
-                "코스트코",
-                "이마트",
-                "트레이더스",
-                "노브랜드",
-                "편의점",
-                "홈플러스",
-                "동네마켓",
-                "전통시장",
-                "이커머스",
-                "기타",
-            ]
-        ]
-        | None
-    ) = None
+    interested_categories: list[CategoryLiteral] | None = None
+    household_size: HouseholdSizeLiteral | None = None
+    wish_markets: list[MarketLiteral] | None = None
     wish_times: list[int] | None = None  # 24시간 배열 (0 또는 1)
 
     @field_validator("wish_times")
@@ -121,19 +113,8 @@ class MoguPostCreateRequest(BaseRequest):
     description: str
     price: int
     labor_fee: int = 0
-    category: Literal["생활용품", "식품/간식류", "패션/잡화", "뷰티/헬스케어"]
-    mogu_market: Literal[
-        "코스트코",
-        "이마트",
-        "트레이더스",
-        "노브랜드",
-        "편의점",
-        "홈플러스",
-        "동네마켓",
-        "전통시장",
-        "이커머스",
-        "기타",
-    ]
+    category: CategoryLiteral
+    mogu_market: MarketLiteral
     mogu_spot: MoguSpotRequest
     mogu_datetime: datetime
     target_count: int
@@ -161,39 +142,12 @@ class MoguPostUpdateRequest(BaseRequest):
     description: str | None = None
     price: int | None = None
     labor_fee: int | None = None
-    category: (
-        Literal["생활용품", "식품/간식류", "패션/잡화", "뷰티/헬스케어"] | None
-    ) = None
-    mogu_market: (
-        Literal[
-            "코스트코",
-            "이마트",
-            "트레이더스",
-            "노브랜드",
-            "편의점",
-            "홈플러스",
-            "동네마켓",
-            "전통시장",
-            "이커머스",
-            "기타",
-        ]
-        | None
-    ) = None
+    category: CategoryLiteral | None = None
+    mogu_market: MarketLiteral | None = None
     mogu_spot: MoguSpotRequest | None = None
     mogu_datetime: datetime | None = None
     target_count: int | None = None
-    status: (
-        Literal[
-            "draft",
-            "recruiting",
-            "locked",
-            "purchasing",
-            "distributing",
-            "completed",
-            "canceled",
-        ]
-        | None
-    ) = None
+    status: PostStatusLiteral | None = None
     images: list[MoguPostImageRequest] | None = None
 
     @field_validator("target_count")
@@ -216,37 +170,12 @@ class MoguPostListQueryParams(BaseRequest):
 
     page: int = 1
     size: int = 20
-    sort: str = "ai_recommended"
-    category: (
-        Literal["생활용품", "식품/간식류", "패션/잡화", "뷰티/헬스케어"] | None
-    ) = None
-    mogu_market: (
-        Literal[
-            "코스트코",
-            "이마트",
-            "트레이더스",
-            "노브랜드",
-            "편의점",
-            "홈플러스",
-            "동네마켓",
-            "전통시장",
-            "이커머스",
-            "기타",
-        ]
-        | None
-    ) = None
-    status: (
-        Literal[
-            "draft",
-            "recruiting",
-            "locked",
-            "purchasing",
-            "distributing",
-            "completed",
-            "canceled",
-        ]
-        | None
-    ) = "recruiting"  # 기본값은 recruiting, None이면 모든 상태 조회
+    sort: SortLiteral = "ai_recommended"
+    category: CategoryLiteral | None = None
+    mogu_market: MarketLiteral | None = None
+    status: PostStatusLiteral | None = (
+        "recruiting"  # 기본값은 recruiting, None이면 모든 상태 조회
+    )
     latitude: float  # 필수 파라미터로 변경
     longitude: float  # 필수 파라미터로 변경
     radius: float = 3.0
@@ -256,7 +185,7 @@ class MoguPostListQueryParams(BaseRequest):
 class ParticipationStatusUpdateRequest(BaseRequest):
     """참여 상태 업데이트 (승인/거부/노쇼/완료)"""
 
-    status: Literal["accepted", "rejected", "no_show", "fulfilled"]
+    status: ParticipationStatusLiteral
 
 
 # Q&A 관련 Request 스키마
@@ -293,11 +222,11 @@ class RatingCreateRequest(BaseRequest):
     mogu_post_id: str
     reviewee_id: str
     stars: int
-    keywords: list[str] | None = None
+    keywords: list[RatingKeywordCodeLiteral] | None = None
 
 
 class RatingUpdateRequest(BaseRequest):
     """평가 수정"""
 
     stars: int | None = None
-    keywords: list[str] | None = None
+    keywords: list[RatingKeywordCodeLiteral] | None = None

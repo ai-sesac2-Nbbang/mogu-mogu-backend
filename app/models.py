@@ -15,7 +15,10 @@
 
 import uuid
 from datetime import date, datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from app.schemas.types import RatingKeywordCodeLiteral
 
 from geoalchemy2 import Geography
 from sqlalchemy import (
@@ -381,7 +384,9 @@ class Rating(Base):
         ForeignKey("app_user.id", ondelete="CASCADE"), nullable=False, index=True
     )
     stars: Mapped[int] = mapped_column(BigInteger, nullable=False)
-    keywords: Mapped[list[str] | None] = mapped_column(ARRAY(Text), nullable=True)
+    keywords: Mapped["list[RatingKeywordCodeLiteral] | None"] = mapped_column(
+        ARRAY(Text), nullable=True
+    )
 
     mogu_post: Mapped["MoguPost"] = relationship(back_populates="ratings")
     reviewer: Mapped["User"] = relationship(

@@ -24,6 +24,7 @@ from app.schemas.responses import (
     ReviewableUserResponse,
     ReviewableUsersResponse,
 )
+from app.schemas.types import RatingKeywordTypeLiteral
 
 # 게시물 관련 평가 API 라우터
 router = APIRouter()
@@ -423,7 +424,7 @@ async def delete_rating(
     description="평가 키워드 목록 조회",
 )
 async def get_rating_keywords(
-    keyword_type: str | None = None,
+    keyword_type: RatingKeywordTypeLiteral | None = None,
     session: AsyncSession = Depends(get_async_session),
 ) -> RatingKeywordListResponse:
     """평가 키워드 목록을 조회합니다."""
