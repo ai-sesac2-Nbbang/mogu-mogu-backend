@@ -243,7 +243,7 @@ async def get_user_keyword_stats(
     stats_query = (
         select(
             func.unnest(Rating.keywords).label("keyword_code"),
-            func.count().label("count"),
+            func.count().label("count_value"),
         )
         .where(
             and_(
@@ -274,7 +274,7 @@ async def get_user_keyword_stats(
         UserKeywordStatsResponse(
             keyword_code=row.keyword_code,
             name_kr=keyword_name_map.get(row.keyword_code, row.keyword_code),
-            count=row.count,
+            count=row.count_value,
         )
         for row in stats_rows
     ]
