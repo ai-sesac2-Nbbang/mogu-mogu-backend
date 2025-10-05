@@ -3,15 +3,16 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, status
 from geoalchemy2.shape import from_shape, to_shape
 from shapely.geometry import Point
-from sqlalchemy import delete, select
+from sqlalchemy import and_, delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api import deps
 from app.core.database_session import get_async_session
 from app.enums import UserStatusEnum
-from app.models import User, UserWishSpot
+from app.models import Rating, RatingKeywordMaster, User, UserWishSpot
 from app.schemas.requests import UserUpdateRequest, WishSpotCreateRequest
 from app.schemas.responses import (
+    UserKeywordStatsListResponse,
     UserKeywordStatsResponse,
     UserResponse,
     WishSpotListResponse,
@@ -217,13 +218,13 @@ async def delete_current_user(
 
 @router.get(
     "/{user_id}/stats/keywords",
-    response_model=UserKeywordStatsResponse,
+    response_model=UserKeywordStatsListResponse,
     description="사용자 키워드 통계 조회",
 )
 async def get_user_keyword_stats(
     user_id: str,
     session: AsyncSession = Depends(get_async_session),
-) -> UserKeywordStatsResponse:
+) -> UserKeywordStatsListResponse:
     """사용자의 키워드 통계를 조회합니다."""
 
     # 사용자 존재 확인
@@ -237,11 +238,45 @@ async def get_user_keyword_stats(
             detail="사용자를 찾을 수 없습니다.",
         )
 
-    # TODO: UserKeywordStats 모델이 구현되면 실제 통계 데이터 조회
-    # 현재는 임시 데이터 반환
-    return UserKeywordStatsResponse(
-        user_id=user_id,
-        keyword_code="temp",
-        count=0,
-        last_updated=datetime.utcnow(),
+    # Rating 테이블에서 실시간 키워드 통계 집계
+    # PostgreSQL의 unnest() 함수로 keywords 배열을 펼쳐서 집계
+    stats_query = (
+        select(
+            func.unnest(Rating.keywords).label("keyword_code"),
+            func.count().label("count"),
+        )
+        .where(
+            and_(
+                Rating.reviewee_id == user_id,
+                Rating.keywords.isnot(None),
+                func.array_length(Rating.keywords, 1) > 0,
+            )
+        )
+        .group_by(func.unnest(Rating.keywords))
+        .order_by(func.count().desc())
     )
+    stats_result = await session.execute(stats_query)
+    stats_rows = stats_result.fetchall()
+
+    # keyword_master에서 name_kr 가져오기
+    keyword_codes = [row.keyword_code for row in stats_rows]
+    keyword_names_query = select(RatingKeywordMaster).where(
+        RatingKeywordMaster.code.in_(keyword_codes)
+    )
+    keyword_names_result = await session.execute(keyword_names_query)
+    keyword_masters = keyword_names_result.scalars().all()
+
+    # keyword_code -> name_kr 매핑 생성
+    keyword_name_map = {km.code: km.name_kr for km in keyword_masters}
+
+    # UserKeywordStatsResponse로 변환
+    stats_data = [
+        UserKeywordStatsResponse(
+            keyword_code=row.keyword_code,
+            name_kr=keyword_name_map.get(row.keyword_code, row.keyword_code),
+            count=row.count,
+        )
+        for row in stats_rows
+    ]
+
+    return UserKeywordStatsListResponse(items=stats_data)

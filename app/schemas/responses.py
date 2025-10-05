@@ -140,13 +140,6 @@ class RatingKeywordMasterResponse(BaseResponse):
         )
 
 
-class UserKeywordStatsResponse(BaseResponse):
-    user_id: str
-    keyword_code: str
-    count: int
-    last_updated: datetime
-
-
 # 프론트엔드 UI 지원을 위한 추가 Response 스키마
 class ReviewableUserResponse(BaseResponse):
     """리뷰 가능한 사용자 응답"""
@@ -549,3 +542,17 @@ class RatingKeywordListResponse(BaseResponse):
     """평가 키워드 목록 응답"""
 
     keywords: list[RatingKeywordMasterResponse]
+
+
+class UserKeywordStatsResponse(BaseResponse):
+    """사용자 키워드 통계 응답"""
+
+    keyword_code: str
+    name_kr: str
+    count: int
+
+
+class UserKeywordStatsListResponse(BaseResponse):
+    """사용자 키워드 통계 목록 응답"""
+
+    items: list[UserKeywordStatsResponse]
