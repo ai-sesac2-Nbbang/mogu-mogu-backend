@@ -10,11 +10,12 @@ from sqlalchemy.orm import selectinload
 
 from app.api import api_messages, deps
 from app.api.common import (
+    _build_mogu_post_basic_data,
+    _calculate_pagination_info,
     _check_favorite_status,
     _check_post_permissions,
     _check_user_participation_status,
-    _extract_thumbnail_image,
-    _get_favorite_count,
+    _execute_paginated_query,
     _get_mogu_post,
     _get_mogu_post_with_relations,
     _get_user_participation_status,
@@ -70,7 +71,7 @@ async def _can_user_review_post(
         return False
 
     # 평가 완료 여부 확인
-    all_ratings_completed, _ = await _check_rating_completion(mogu_post, session)
+    all_ratings_completed = await _check_rating_completion(mogu_post, session)
 
     return not all_ratings_completed
 
@@ -240,11 +241,8 @@ async def get_mogu_posts(
     # 응답 데이터 구성
     posts = []
     for post in mogu_posts:
-        # 찜하기 개수 조회
-        favorite_count = await _get_favorite_count(post.id, session)
-
-        # 썸네일 이미지 추출
-        thumbnail_image = _extract_thumbnail_image(post)
+        # 게시물 기본 데이터 구성
+        basic_data = await _build_mogu_post_basic_data(post, session)
 
         posts.append(
             MoguPostListItemResponse(
@@ -258,8 +256,8 @@ async def get_mogu_posts(
                 target_count=post.target_count or 0,
                 joined_count=post.joined_count,
                 created_at=post.created_at,
-                thumbnail_image=thumbnail_image,
-                favorite_count=favorite_count,
+                thumbnail_image=basic_data["thumbnail_image"],
+                favorite_count=basic_data["favorite_count"],
             )
         )
 
@@ -309,27 +307,15 @@ async def get_my_posts(
     # 정렬 (최신순)
     query = query.order_by(desc(MoguPost.created_at))
 
-    # 전체 개수 조회
-    count_query = select(func.count()).select_from(query.subquery())
-    count_result = await session.execute(count_query)
-    total = count_result.scalar() or 0
-
-    # 페이지네이션 적용
-    offset = (page - 1) * size
-    query = query.offset(offset).limit(size)
-
-    # 쿼리 실행
-    result = await session.execute(query)
+    # 페이지네이션 적용된 쿼리 실행
+    result, total = await _execute_paginated_query(query, page, size, session)
     posts = result.scalars().all()
 
     # 응답 데이터 구성
     posts_list = []
     for post in posts:
-        # 찜하기 개수 조회
-        favorite_count = await _get_favorite_count(post.id, session)
-
-        # 썸네일 이미지 추출
-        thumbnail_image = _extract_thumbnail_image(post)
+        # 게시물 기본 데이터 구성
+        basic_data = await _build_mogu_post_basic_data(post, session)
 
         # 리뷰 가능 여부 확인
         can_review = await _can_user_review_post(post, current_user, session)
@@ -346,20 +332,15 @@ async def get_my_posts(
                 target_count=post.target_count or 0,
                 joined_count=post.joined_count,
                 created_at=post.created_at,
-                thumbnail_image=thumbnail_image,
-                favorite_count=favorite_count,
+                thumbnail_image=basic_data["thumbnail_image"],
+                favorite_count=basic_data["favorite_count"],
                 can_review=can_review,
             )
         )
 
     return MoguPostListWithReviewPaginatedResponse(
         items=posts_list,
-        pagination={
-            "page": page,
-            "limit": size,
-            "total": total,
-            "total_pages": (total + size - 1) // size,
-        },
+        pagination=await _calculate_pagination_info(page, size, total),
     )
 
 
@@ -399,27 +380,15 @@ async def get_my_participations(
     # 정렬 (참여 신청일 최신순)
     query = query.order_by(desc(Participation.applied_at))
 
-    # 전체 개수 조회
-    count_query = select(func.count()).select_from(query.subquery())
-    count_result = await session.execute(count_query)
-    total = count_result.scalar() or 0
-
-    # 페이지네이션 적용
-    offset = (page - 1) * size
-    query = query.offset(offset).limit(size)
-
-    # 쿼리 실행
-    result = await session.execute(query)
+    # 페이지네이션 적용된 쿼리 실행
+    result, total = await _execute_paginated_query(query, page, size, session)
     rows = result.all()
 
     # 응답 데이터 구성
     posts_list: list[MoguPostWithParticipationResponse] = []
     for post, participation in rows:
-        # 찜하기 개수 조회
-        favorite_count = await _get_favorite_count(post.id, session)
-
-        # 썸네일 이미지 추출
-        thumbnail_image = _extract_thumbnail_image(post)
+        # 게시물 기본 데이터 구성
+        basic_data = await _build_mogu_post_basic_data(post, session)
 
         # 리뷰 가능 여부 확인
         can_review = await _can_user_review_post(post, current_user, session)
@@ -436,8 +405,8 @@ async def get_my_participations(
                 target_count=post.target_count or 0,
                 joined_count=post.joined_count,
                 created_at=post.created_at,
-                thumbnail_image=thumbnail_image,
-                favorite_count=favorite_count,
+                thumbnail_image=basic_data["thumbnail_image"],
+                favorite_count=basic_data["favorite_count"],
                 can_review=can_review,
                 # 참여 상태 정보
                 my_participation_status=participation.status,
@@ -448,12 +417,7 @@ async def get_my_participations(
 
     return MoguPostWithParticipationPaginatedResponse(
         items=posts_list,
-        pagination={
-            "page": page,
-            "limit": size,
-            "total": total,
-            "total_pages": (total + size - 1) // size,
-        },
+        pagination=await _calculate_pagination_info(page, size, total),
     )
 
 

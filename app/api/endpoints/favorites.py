@@ -1,14 +1,15 @@
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi import status as http_status
-from sqlalchemy import and_, desc, func, select
+from sqlalchemy import and_, desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.api import api_messages, deps
 from app.api.common import (
+    _build_mogu_post_basic_data,
+    _calculate_pagination_info,
     _check_favorite_status,
-    _extract_thumbnail_image,
-    _get_favorite_count,
+    _execute_paginated_query,
     _get_mogu_post,
 )
 from app.core.database_session import get_async_session
@@ -124,27 +125,15 @@ async def get_my_favorites(
     # 정렬 (최신 찜하기 순)
     query = query.order_by(desc(MoguFavorite.created_at))
 
-    # 전체 개수 조회
-    count_query = select(func.count()).select_from(query.subquery())
-    count_result = await session.execute(count_query)
-    total = count_result.scalar() or 0
-
-    # 페이지네이션 적용
-    offset = (page - 1) * size
-    query = query.offset(offset).limit(size)
-
-    # 쿼리 실행
-    result = await session.execute(query)
+    # 페이지네이션 적용된 쿼리 실행
+    result, total = await _execute_paginated_query(query, page, size, session)
     posts = result.scalars().all()
 
     # 응답 데이터 구성
     posts_list = []
     for post in posts:
-        # 찜하기 개수 조회
-        favorite_count = await _get_favorite_count(post.id, session)
-
-        # 썸네일 이미지 추출
-        thumbnail_image = _extract_thumbnail_image(post)
+        # 게시물 기본 데이터 구성
+        basic_data = await _build_mogu_post_basic_data(post, session)
 
         posts_list.append(
             MoguPostListItemResponse(
@@ -158,17 +147,12 @@ async def get_my_favorites(
                 target_count=post.target_count or 0,
                 joined_count=post.joined_count,
                 created_at=post.created_at,
-                thumbnail_image=thumbnail_image,
-                favorite_count=favorite_count,
+                thumbnail_image=basic_data["thumbnail_image"],
+                favorite_count=basic_data["favorite_count"],
             )
         )
 
     return MoguPostFavoritesPaginatedResponse(
         items=posts_list,
-        pagination={
-            "page": page,
-            "limit": size,
-            "total": total,
-            "total_pages": (total + size - 1) // size,
-        },
+        pagination=await _calculate_pagination_info(page, size, total),
     )

@@ -1,5 +1,5 @@
 from datetime import date, datetime
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, TypedDict
 
 from geoalchemy2.shape import to_shape
 from pydantic import BaseModel, ConfigDict, EmailStr
@@ -13,6 +13,54 @@ if TYPE_CHECKING:
         RatingKeywordMaster,
         User,
     )
+
+
+class PaginationInfo(TypedDict):
+    """페이지네이션 정보 타입"""
+
+    page: int
+    limit: int
+    total: int
+    total_pages: int
+
+
+class DeadlineInfo(TypedDict):
+    """평가 마감 정보 타입"""
+
+    completed_at: str
+    deadline: str
+    remaining_hours: int
+    is_expired: bool
+
+
+class ImageInfo(TypedDict, total=False):
+    """이미지 정보 타입"""
+
+    id: str
+    image_url: str
+    order: int
+    is_thumbnail: bool
+
+
+class ParticipationInfo(TypedDict):
+    """참여 정보 타입"""
+
+    status: str
+    applied_at: str
+    decided_at: str | None
+
+
+class QuestionAnswerInfo(TypedDict):
+    """질문답변 정보 타입"""
+
+    id: str
+    questioner_id: str
+    question: str
+    answerer_id: str | None
+    answer: str | None
+    is_private: bool
+    question_created_at: str
+    answer_created_at: str | None
 
 
 class BaseResponse(BaseModel):
@@ -194,7 +242,7 @@ class RatingStatusResponse(BaseResponse):
     can_review: bool
     reviewable_users: list[ReviewableUserResponse] | None = None
     reason: str | None = None
-    deadline_info: dict[str, Any] | None = None
+    deadline_info: DeadlineInfo | None = None
 
 
 class UserKeywordStatsSummaryResponse(BaseResponse):
@@ -255,19 +303,19 @@ class MoguPostResponse(BaseResponse):
     target_count: int | None = None
     joined_count: int
     created_at: datetime
-    images: list[dict[str, Any]] | None = None
+    images: list[ImageInfo] | None = None
     user: dict[str, str | None]
-    my_participation: dict[str, Any] | None = None
+    my_participation: ParticipationInfo | None = None
     is_favorited: bool | None = None
-    questions_answers: list[dict[str, Any]] | None = None
+    questions_answers: list[QuestionAnswerInfo] | None = None
 
     @classmethod
     def from_mogu_post(
         cls,
         mogu_post: "MoguPost",
-        my_participation: dict[str, Any] | None = None,
+        my_participation: ParticipationInfo | None = None,
         is_favorited: bool = False,
-        questions_answers: list[dict[str, Any]] | None = None,
+        questions_answers: list[QuestionAnswerInfo] | None = None,
     ) -> "MoguPostResponse":
         """MoguPost 모델로부터 MoguPostResponse를 생성합니다."""
         # Shapely를 사용한 위도/경도 추출
@@ -346,22 +394,22 @@ class MoguPostWithParticipationResponse(MoguPostListItemResponse):
 
 class MoguPostListPaginatedResponse(BaseResponse):
     items: list[MoguPostListItemResponse]
-    pagination: dict[str, int]
+    pagination: PaginationInfo
 
 
 class MoguPostListWithReviewPaginatedResponse(BaseResponse):
     items: list[MoguPostListItemWithReviewResponse]
-    pagination: dict[str, int]
+    pagination: PaginationInfo
 
 
 class MoguPostWithParticipationPaginatedResponse(BaseResponse):
     items: list[MoguPostWithParticipationResponse]
-    pagination: dict[str, int]
+    pagination: PaginationInfo
 
 
 class MoguPostFavoritesPaginatedResponse(BaseResponse):
     items: list[MoguPostListItemResponse]
-    pagination: dict[str, int]
+    pagination: PaginationInfo
 
 
 # 참여 관련 Response 스키마
@@ -451,7 +499,7 @@ class QuestionAnswerConverter:
     @staticmethod
     def to_dict_list(
         questions_answers: list["QuestionAnswer"] | None,
-    ) -> list[dict[str, Any]] | None:
+    ) -> list[QuestionAnswerInfo] | None:
         """Q&A 데이터를 딕셔너리 형태로 변환합니다."""
         if not questions_answers:
             return None
@@ -464,8 +512,10 @@ class QuestionAnswerConverter:
                 "answerer_id": qa.answerer_id,
                 "answer": qa.answer,
                 "is_private": qa.is_private,
-                "question_created_at": qa.question_created_at,
-                "answer_created_at": qa.answer_created_at,
+                "question_created_at": qa.question_created_at.isoformat(),
+                "answer_created_at": (
+                    qa.answer_created_at.isoformat() if qa.answer_created_at else None
+                ),
             }
             for qa in questions_answers
         ]
