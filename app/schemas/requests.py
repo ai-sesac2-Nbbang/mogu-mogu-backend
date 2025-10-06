@@ -1,6 +1,6 @@
 from datetime import date, datetime
 
-from pydantic import BaseModel, EmailStr, field_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator
 
 from app.schemas.types import (
     CategoryLiteral,
@@ -230,3 +230,18 @@ class RatingUpdateRequest(BaseRequest):
 
     stars: int | None = None
     keywords: list[RatingKeywordCodeLiteral] | None = None
+
+
+class PresignedUrlRequest(BaseRequest):
+    """사전 서명 URL 생성 요청"""
+
+    file_name: str = Field(..., min_length=1, max_length=255, description="파일명")
+    content_type: str = Field(
+        ..., pattern=r"^image\/(jpeg|jpg|png|gif|webp)$", description="이미지 MIME 타입"
+    )
+    file_size: int = Field(
+        ..., ge=1, le=10 * 1024 * 1024, description="파일 크기 (바이트, 최대 10MB)"
+    )
+    bucket_name: str = Field(
+        default="images", min_length=1, max_length=63, description="버킷명"
+    )

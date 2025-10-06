@@ -42,6 +42,15 @@ class ImageInfo(TypedDict, total=False):
     is_thumbnail: bool
 
 
+class PresignedUrlResponse(BaseModel):
+    """사전 서명 URL 응답"""
+
+    upload_url: str
+    file_path: str
+    expires_in: int
+    bucket_name: str
+
+
 class ParticipationInfo(TypedDict):
     """참여 정보 타입"""
 
