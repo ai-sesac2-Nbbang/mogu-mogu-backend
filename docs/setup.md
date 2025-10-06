@@ -130,27 +130,7 @@ backend/
 
 ## 환경 변수 설정
 
-프로젝트 루트에 `.env` 파일을 생성하고 다음 내용을 추가하세요:
-
-```env
-# 데이터베이스 설정
-DATABASE__HOSTNAME=localhost
-DATABASE__USERNAME=postgres
-DATABASE__PASSWORD=your_password_here
-DATABASE__PORT=5432
-DATABASE__DB=postgres
-
-# 보안 설정
-SECURITY__JWT_SECRET_KEY=your_secret_key_here
-SECURITY__JWT_ACCESS_TOKEN_EXPIRE_SECS=86400
-SECURITY__REFRESH_TOKEN_EXPIRE_SECS=2419200
-SECURITY__PASSWORD_BCRYPT_ROUNDS=12
-SECURITY__ALLOWED_HOSTS=["localhost", "127.0.0.1"]
-SECURITY__BACKEND_CORS_ORIGINS=["http://localhost:3000"]
-
-# 로깅 설정
-LOG_LEVEL=INFO
-```
+프로젝트 루트에 `.env` 파일을 생성하고 [`.env.example`](https://github.com/ai-sesac2-Nbbang/mogu-mogu-backend/blob/main/.env.example)을 참고하여 내용을 추가하세요.
 
 [프로젝트 환경 별 .env 파일 확인하기 (members only)](https://www.notion.so/do0ori/env-file-26d8ad3586848178b583f7a3faaaba57)
 
