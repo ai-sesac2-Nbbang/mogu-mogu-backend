@@ -1,6 +1,7 @@
 import logging
 import secrets
 import time
+import uuid
 from typing import Any
 from urllib.parse import urlencode
 
@@ -17,6 +18,7 @@ from app.core.security.kakao import (
     get_kakao_login_url,
     get_kakao_user_info,
 )
+from app.core.supabase import get_supabase_storage
 from app.enums import UserStatusEnum
 from app.models import RefreshToken, User
 from app.schemas.requests import RefreshTokenRequest
@@ -57,6 +59,28 @@ def _extract_kakao_user_info(
     return email, nickname, profile_image_url
 
 
+async def _upload_kakao_profile_image(
+    user_id: str, profile_image_url: str
+) -> str | None:
+    """Kakao 프로필 이미지를 다운로드하여 Supabase Storage에 업로드합니다."""
+    try:
+        # 파일 경로 생성: user_id/uuid.jpg
+        file_extension = "jpg"
+        file_uuid = str(uuid.uuid4())
+        file_path = f"{user_id}/{file_uuid}.{file_extension}"
+
+        # Supabase Storage에 업로드
+        supabase_storage = get_supabase_storage()
+        await supabase_storage.upload_from_url(
+            bucket_name="images", file_path=file_path, image_url=profile_image_url
+        )
+
+        return file_path
+    except Exception as e:
+        logger.warning(f"Kakao 프로필 이미지 업로드 실패: {str(e)}")
+        return None
+
+
 async def _create_new_user(
     email: str,
     kakao_id: int,
@@ -70,10 +94,20 @@ async def _create_new_user(
         kakao_id=kakao_id,
         provider="kakao",
         nickname=nickname,
-        profile_image_url=profile_image_url,
+        profile_image_path=None,  # 초기에는 None으로 설정
         status=UserStatusEnum.PENDING_ONBOARDING.value,
     )
     session.add(user)
+    await session.flush()  # user.id를 얻기 위해 flush 사용
+
+    # Kakao 프로필 이미지가 있으면 업로드 시도
+    if profile_image_url:
+        profile_image_path = await _upload_kakao_profile_image(
+            user.id, profile_image_url
+        )
+        if profile_image_path:
+            user.profile_image_path = profile_image_path
+
     await session.commit()
     return user
 

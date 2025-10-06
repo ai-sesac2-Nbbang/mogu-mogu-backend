@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime
 
 from fastapi import APIRouter, Depends
@@ -23,6 +24,7 @@ from app.api.common import (
 )
 from app.api.endpoints.ratings import _check_rating_completion, _check_rating_deadline
 from app.core.database_session import get_async_session
+from app.core.supabase import get_supabase_storage
 from app.enums import ParticipationStatusEnum, PostStatusEnum
 from app.models import MoguPost, MoguPostImage, Participation, User
 from app.schemas.requests import (
@@ -41,6 +43,8 @@ from app.schemas.responses import (
     QuestionAnswerConverter,
 )
 from app.schemas.types import ParticipationStatusLiteral, PostStatusLiteral
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -154,7 +158,7 @@ async def create_mogu_post(
         for img_data in data.images:
             mogu_post_image = MoguPostImage(
                 mogu_post_id=mogu_post.id,
-                image_url=img_data.image_url,
+                image_path=img_data.image_path,
                 sort_order=img_data.sort_order,
                 is_thumbnail=img_data.is_thumbnail,
             )
@@ -508,7 +512,7 @@ async def update_mogu_post(
         for img_data in update_data["images"]:
             mogu_post_image = MoguPostImage(
                 mogu_post_id=post_id,
-                image_url=img_data["image_url"],
+                image_path=img_data["image_path"],
                 sort_order=img_data["sort_order"],
                 is_thumbnail=img_data["is_thumbnail"],
             )
@@ -547,6 +551,15 @@ async def delete_mogu_post(
 
     # 삭제 가능한 상태인지 확인
     await _validate_post_status_for_deletion(mogu_post)
+
+    # 이미지들을 Supabase Storage에서 삭제
+    if mogu_post.images:
+        supabase_storage = get_supabase_storage()
+        for img in mogu_post.images:
+            try:
+                await supabase_storage.delete_file("images", img.image_path)
+            except Exception as e:
+                logger.warning(f"이미지 삭제 실패: {img.image_path}, 오류: {str(e)}")
 
     # 게시물 삭제 (CASCADE로 관련 데이터도 함께 삭제됨)
     await session.delete(mogu_post)

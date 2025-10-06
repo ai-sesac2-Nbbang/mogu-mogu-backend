@@ -46,7 +46,7 @@ class UserUpdateRequest(BaseRequest):
 
     # 기본 정보
     nickname: str | None = None
-    profile_image_url: str | None = None
+    profile_image_path: str | None = None
 
     # 온보딩 필수 정보
     name: str | None = None
@@ -101,7 +101,7 @@ class MoguSpotRequest(BaseRequest):
 class MoguPostImageRequest(BaseRequest):
     """모구 게시물 이미지 정보"""
 
-    image_url: str
+    image_path: str
     sort_order: int
     is_thumbnail: bool
 

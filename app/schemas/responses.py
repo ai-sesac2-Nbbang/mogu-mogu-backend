@@ -37,7 +37,7 @@ class ImageInfo(TypedDict, total=False):
     """이미지 정보 타입"""
 
     id: str
-    image_url: str
+    image_path: str
     order: int
     is_thumbnail: bool
 
@@ -94,7 +94,7 @@ class UserResponse(BaseResponse):
 
     # 기본 정보
     nickname: str | None = None
-    profile_image_url: str | None = None
+    profile_image_path: str | None = None
 
     # 온보딩 정보
     name: str | None = None
@@ -126,7 +126,7 @@ class UserResponse(BaseResponse):
             kakao_id=user.kakao_id,
             provider=user.provider,
             nickname=user.nickname,
-            profile_image_url=user.profile_image_url,
+            profile_image_path=user.profile_image_path,
             name=user.name,
             phone_number=user.phone_number,
             birth_date=user.birth_date,
@@ -203,7 +203,7 @@ class ReviewableUserResponse(BaseResponse):
 
     user_id: str
     nickname: str | None = None
-    profile_image_url: str | None = None
+    profile_image_path: str | None = None
     participation_status: str
     rating_id: str | None = None  # 작성된 리뷰의 ID (null이면 리뷰 미작성)
 
@@ -217,7 +217,7 @@ class ReviewableUserResponse(BaseResponse):
         return cls(
             user_id=participation.user.id,
             nickname=participation.user.nickname or "익명",
-            profile_image_url=participation.user.profile_image_url,
+            profile_image_path=participation.user.profile_image_path,
             participation_status=participation.status,
             rating_id=rating_id,
         )
@@ -233,7 +233,7 @@ class ReviewableUserResponse(BaseResponse):
         return cls(
             user_id=user.id,
             nickname=user.nickname or "익명",
-            profile_image_url=user.profile_image_url,
+            profile_image_path=user.profile_image_path,
             participation_status=participation_status,
             rating_id=rating_id,
         )
@@ -262,7 +262,7 @@ class MoguSpotResponse(BaseResponse):
 
 class MoguPostImageResponse(BaseResponse):
     id: str
-    image_url: str
+    image_path: str
     sort_order: int
     is_thumbnail: bool
 
@@ -270,7 +270,7 @@ class MoguPostImageResponse(BaseResponse):
 class MoguPostUserResponse(BaseResponse):
     id: str
     nickname: str
-    profile_image_url: str | None = None
+    profile_image_path: str | None = None
 
 
 class MoguPostParticipationResponse(BaseResponse):
@@ -345,7 +345,7 @@ class MoguPostResponse(BaseResponse):
             images=[
                 {
                     "id": img.id,
-                    "image_url": img.image_url,
+                    "image_path": img.image_path,
                     "order": img.sort_order,
                 }
                 for img in mogu_post.images
@@ -353,7 +353,7 @@ class MoguPostResponse(BaseResponse):
             user={
                 "id": mogu_post.user.id,
                 "nickname": mogu_post.user.nickname,
-                "profile_image_url": mogu_post.user.profile_image_url,
+                "profile_image_path": mogu_post.user.profile_image_path,
             },
             my_participation=my_participation,
             is_favorited=is_favorited,
@@ -485,7 +485,7 @@ class QuestionWithAnswerResponse(BaseResponse):
             questioner={
                 "id": question.questioner.id,
                 "nickname": question.questioner.nickname,
-                "profile_image_url": question.questioner.profile_image_url,
+                "profile_image_path": question.questioner.profile_image_path,
             },
             answerer=answerer_data,
         )
@@ -530,7 +530,7 @@ class QuestionAnswerConverter:
             return {
                 "id": question.answerer.id,
                 "nickname": question.answerer.nickname,
-                "profile_image_url": question.answerer.profile_image_url,
+                "profile_image_path": question.answerer.profile_image_path,
             }
         return None
 
@@ -587,7 +587,7 @@ class RatingWithReviewerResponse(BaseResponse):
             reviewer={
                 "id": rating.reviewer.id,
                 "nickname": rating.reviewer.nickname,
-                "profile_image_url": rating.reviewer.profile_image_url,
+                "profile_image_path": rating.reviewer.profile_image_path,
             },
         )
 

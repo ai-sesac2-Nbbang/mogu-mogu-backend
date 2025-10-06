@@ -1,8 +1,13 @@
 """Supabase Storage 클라이언트 설정"""
 
+import logging
+
+from fastapi import status
 from supabase import Client, create_client
 
 from app.core.config import get_settings
+
+logger = logging.getLogger(__name__)
 
 
 class SupabaseStorage:
@@ -51,6 +56,35 @@ class SupabaseStorage:
     def get_public_url(self, bucket_name: str, file_path: str) -> str:
         """공개 URL 생성"""
         return str(self.client.storage.from_(bucket_name).get_public_url(file_path))
+
+    async def upload_from_url(
+        self, bucket_name: str, file_path: str, image_url: str
+    ) -> bool:
+        """URL에서 이미지를 다운로드하여 Supabase Storage에 업로드"""
+        try:
+            import aiohttp
+
+            timeout = aiohttp.ClientTimeout(total=30)
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+                async with session.get(image_url) as response:
+                    if response.status == status.HTTP_200_OK:
+                        image_data = await response.read()
+
+                        # Supabase Storage에 업로드
+                        result = self.client.storage.from_(bucket_name).upload(
+                            path=file_path,
+                            file=image_data,
+                            file_options={"content-type": "image/jpeg"},
+                        )
+
+                        if result.get("error"):
+                            raise Exception(f"업로드 실패: {result['error']}")
+
+                        return True
+                    else:
+                        raise Exception(f"이미지 다운로드 실패: HTTP {response.status}")
+        except Exception as e:
+            raise Exception(f"URL에서 이미지 업로드 중 오류: {str(e)}")
 
 
 # 전역 인스턴스 (lazy initialization)
