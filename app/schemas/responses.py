@@ -1,5 +1,5 @@
 from datetime import date, datetime
-from typing import TYPE_CHECKING, Any, TypedDict
+from typing import TYPE_CHECKING, TypedDict
 
 from geoalchemy2.shape import to_shape
 from pydantic import BaseModel, ConfigDict, EmailStr
@@ -57,6 +57,14 @@ class ParticipationInfo(TypedDict):
     status: str
     applied_at: str
     decided_at: str | None
+
+
+class UserBasicInfo(TypedDict):
+    """사용자 기본 정보 타입"""
+
+    id: str
+    nickname: str | None
+    profile_image_path: str | None
 
 
 class QuestionAnswerInfo(TypedDict):
@@ -305,7 +313,7 @@ class MoguPostResponse(BaseResponse):
     joined_count: int
     created_at: datetime
     images: list[ImageInfo] | None = None
-    user: dict[str, str | None]
+    user: UserBasicInfo
     my_participation: ParticipationInfo | None = None
     is_favorited: bool | None = None
     questions_answers: list[QuestionAnswerInfo] | None = None
@@ -442,7 +450,7 @@ class ParticipationWithUserResponse(BaseResponse):
     status: str
     applied_at: datetime
     decided_at: datetime | None = None
-    user: dict[str, str | None]
+    user: UserBasicInfo
 
 
 class ParticipationListResponse(BaseResponse):
@@ -457,7 +465,7 @@ class QuestionResponse(BaseResponse):
     question: str
     is_private: bool
     question_created_at: datetime
-    questioner: dict[str, str | None]
+    questioner: UserBasicInfo
 
 
 class QuestionWithAnswerResponse(BaseResponse):
@@ -467,12 +475,12 @@ class QuestionWithAnswerResponse(BaseResponse):
     is_private: bool
     question_created_at: datetime
     answer_created_at: datetime | None = None
-    questioner: dict[str, str | None]
-    answerer: dict[str, str | None] | None = None
+    questioner: UserBasicInfo
+    answerer: UserBasicInfo | None = None
 
     @classmethod
     def from_question(
-        cls, question: "QuestionAnswer", answerer_data: dict[str, Any] | None = None
+        cls, question: "QuestionAnswer", answerer_data: UserBasicInfo | None = None
     ) -> "QuestionWithAnswerResponse":
         """QuestionAnswer 모델로부터 QuestionWithAnswerResponse를 생성합니다."""
         return cls(
@@ -524,7 +532,7 @@ class QuestionAnswerConverter:
         ]
 
     @staticmethod
-    def build_answerer_data(question: "QuestionAnswer") -> dict[str, Any] | None:
+    def build_answerer_data(question: "QuestionAnswer") -> UserBasicInfo | None:
         """답변자 정보를 구성합니다."""
         if question.answerer:
             return {
@@ -571,7 +579,7 @@ class RatingWithReviewerResponse(BaseResponse):
     stars: int
     keywords: list[str] | None = None
     created_at: datetime
-    reviewer: dict[str, str | None]
+    reviewer: UserBasicInfo
 
     @classmethod
     def from_rating(cls, rating: "Rating") -> "RatingWithReviewerResponse":
