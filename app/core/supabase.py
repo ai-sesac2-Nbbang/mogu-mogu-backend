@@ -2,6 +2,7 @@
 
 import logging
 
+import aiohttp
 from fastapi import status
 from supabase import Client, create_client
 
@@ -75,8 +76,6 @@ class SupabaseStorage:
     ) -> bool:
         """URL에서 이미지를 다운로드하여 Supabase Storage에 업로드"""
         try:
-            import aiohttp
-
             timeout = aiohttp.ClientTimeout(total=30)
             async with aiohttp.ClientSession(timeout=timeout) as session:
                 async with session.get(image_url) as response:
