@@ -22,7 +22,7 @@ class SupabaseStorage:
         settings = get_settings()
 
         return create_client(
-            settings.supabase.url, settings.supabase.anon_key.get_secret_value()
+            settings.supabase.url, settings.supabase.service_role_key.get_secret_value()
         )
 
     async def delete_file(self, bucket_name: str, file_path: str) -> bool:
@@ -30,7 +30,17 @@ class SupabaseStorage:
         try:
             result = self.client.storage.from_(bucket_name).remove([file_path])
 
-            if result.get("error"):
+            # remove 메서드는 리스트를 반환하므로 리스트로 처리
+            if isinstance(result, list):
+                # 빈 리스트이거나 에러가 없으면 성공
+                if not result:
+                    return True
+                # 에러가 있는 경우 확인
+                for item in result:
+                    if isinstance(item, dict) and item.get("error"):
+                        raise Exception(f"삭제 실패: {item['error']}")
+                return True
+            elif isinstance(result, dict) and result.get("error"):
                 raise Exception(f"삭제 실패: {result['error']}")
 
             return True
@@ -43,13 +53,13 @@ class SupabaseStorage:
         """업로드용 사전 서명 URL 생성"""
         try:
             result = self.client.storage.from_(bucket_name).create_signed_upload_url(
-                file_path, expires_in
+                file_path
             )
 
             if result.get("error"):
                 raise Exception(f"사전 서명 URL 생성 실패: {result['error']}")
 
-            return str(result.get("signedURL", ""))
+            return str(result.get("signed_url", ""))
         except Exception as e:
             raise Exception(f"사전 서명 URL 생성 중 오류: {str(e)}")
 
