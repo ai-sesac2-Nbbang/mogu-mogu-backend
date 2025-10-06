@@ -4,6 +4,7 @@ from app.api import api_messages
 from app.api.endpoints import (
     auth,
     favorites,
+    images,
     mogu_posts,
     participations,
     questions,
@@ -49,3 +50,4 @@ api_router.include_router(questions.router, prefix="/mogu-posts", tags=["questio
 api_router.include_router(ratings.router, prefix="/mogu-posts", tags=["ratings"])
 api_router.include_router(ratings.independent_router, prefix="", tags=["ratings"])
 api_router.include_router(ratings.keywords_router, prefix="", tags=["rating-keywords"])
+api_router.include_router(images.router, prefix="/images", tags=["images"])

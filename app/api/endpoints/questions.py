@@ -93,7 +93,7 @@ async def create_question(
         questioner={
             "id": question.questioner.id,
             "nickname": question.questioner.nickname,
-            "profile_image_url": question.questioner.profile_image_url,
+            "profile_image_path": question.questioner.profile_image_path,
         },
     )
 
@@ -154,7 +154,7 @@ async def update_question(
         questioner={
             "id": question.questioner.id,
             "nickname": question.questioner.nickname,
-            "profile_image_url": question.questioner.profile_image_url,
+            "profile_image_path": question.questioner.profile_image_path,
         },
     )
 

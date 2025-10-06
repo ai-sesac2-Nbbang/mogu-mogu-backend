@@ -49,6 +49,12 @@ class Kakao(BaseModel):
     user_info_url: str = "https://kapi.kakao.com/v2/user/me"
 
 
+class Supabase(BaseModel):
+    url: str = "https://your-project.supabase.co"
+    anon_key: SecretStr = SecretStr("your-anon-key")
+    service_role_key: SecretStr = SecretStr("your-service-role-key")
+
+
 class Database(BaseModel):
     hostname: str = "postgres"
     username: str = "postgres"
@@ -61,6 +67,7 @@ class Settings(BaseSettings):
     security: Security = Field(default_factory=Security)
     database: Database = Field(default_factory=Database)
     kakao: Kakao = Field(default_factory=Kakao)
+    supabase: Supabase = Field(default_factory=Supabase)
     log_level: str = "INFO"
     environment: str = "development"
 
@@ -80,6 +87,7 @@ class Settings(BaseSettings):
         env_file=f"{PROJECT_DIR}/.env",
         case_sensitive=False,
         env_nested_delimiter="__",
+        extra="ignore",
     )
 
 

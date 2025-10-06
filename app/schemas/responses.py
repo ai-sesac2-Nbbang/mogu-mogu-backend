@@ -1,5 +1,5 @@
 from datetime import date, datetime
-from typing import TYPE_CHECKING, Any, TypedDict
+from typing import TYPE_CHECKING, TypedDict
 
 from geoalchemy2.shape import to_shape
 from pydantic import BaseModel, ConfigDict, EmailStr
@@ -37,9 +37,18 @@ class ImageInfo(TypedDict, total=False):
     """이미지 정보 타입"""
 
     id: str
-    image_url: str
+    image_path: str
     order: int
     is_thumbnail: bool
+
+
+class PresignedUrlResponse(BaseModel):
+    """사전 서명 URL 응답"""
+
+    upload_url: str
+    file_path: str
+    expires_in: int
+    bucket_name: str
 
 
 class ParticipationInfo(TypedDict):
@@ -48,6 +57,14 @@ class ParticipationInfo(TypedDict):
     status: str
     applied_at: str
     decided_at: str | None
+
+
+class UserBasicInfo(TypedDict):
+    """사용자 기본 정보 타입"""
+
+    id: str
+    nickname: str | None
+    profile_image_path: str | None
 
 
 class QuestionAnswerInfo(TypedDict):
@@ -85,7 +102,7 @@ class UserResponse(BaseResponse):
 
     # 기본 정보
     nickname: str | None = None
-    profile_image_url: str | None = None
+    profile_image_path: str | None = None
 
     # 온보딩 정보
     name: str | None = None
@@ -117,7 +134,7 @@ class UserResponse(BaseResponse):
             kakao_id=user.kakao_id,
             provider=user.provider,
             nickname=user.nickname,
-            profile_image_url=user.profile_image_url,
+            profile_image_path=user.profile_image_path,
             name=user.name,
             phone_number=user.phone_number,
             birth_date=user.birth_date,
@@ -194,7 +211,7 @@ class ReviewableUserResponse(BaseResponse):
 
     user_id: str
     nickname: str | None = None
-    profile_image_url: str | None = None
+    profile_image_path: str | None = None
     participation_status: str
     rating_id: str | None = None  # 작성된 리뷰의 ID (null이면 리뷰 미작성)
 
@@ -208,7 +225,7 @@ class ReviewableUserResponse(BaseResponse):
         return cls(
             user_id=participation.user.id,
             nickname=participation.user.nickname or "익명",
-            profile_image_url=participation.user.profile_image_url,
+            profile_image_path=participation.user.profile_image_path,
             participation_status=participation.status,
             rating_id=rating_id,
         )
@@ -224,7 +241,7 @@ class ReviewableUserResponse(BaseResponse):
         return cls(
             user_id=user.id,
             nickname=user.nickname or "익명",
-            profile_image_url=user.profile_image_url,
+            profile_image_path=user.profile_image_path,
             participation_status=participation_status,
             rating_id=rating_id,
         )
@@ -253,7 +270,7 @@ class MoguSpotResponse(BaseResponse):
 
 class MoguPostImageResponse(BaseResponse):
     id: str
-    image_url: str
+    image_path: str
     sort_order: int
     is_thumbnail: bool
 
@@ -261,7 +278,7 @@ class MoguPostImageResponse(BaseResponse):
 class MoguPostUserResponse(BaseResponse):
     id: str
     nickname: str
-    profile_image_url: str | None = None
+    profile_image_path: str | None = None
 
 
 class MoguPostParticipationResponse(BaseResponse):
@@ -296,7 +313,7 @@ class MoguPostResponse(BaseResponse):
     joined_count: int
     created_at: datetime
     images: list[ImageInfo] | None = None
-    user: dict[str, str | None]
+    user: UserBasicInfo
     my_participation: ParticipationInfo | None = None
     is_favorited: bool | None = None
     questions_answers: list[QuestionAnswerInfo] | None = None
@@ -336,7 +353,7 @@ class MoguPostResponse(BaseResponse):
             images=[
                 {
                     "id": img.id,
-                    "image_url": img.image_url,
+                    "image_path": img.image_path,
                     "order": img.sort_order,
                 }
                 for img in mogu_post.images
@@ -344,7 +361,7 @@ class MoguPostResponse(BaseResponse):
             user={
                 "id": mogu_post.user.id,
                 "nickname": mogu_post.user.nickname,
-                "profile_image_url": mogu_post.user.profile_image_url,
+                "profile_image_path": mogu_post.user.profile_image_path,
             },
             my_participation=my_participation,
             is_favorited=is_favorited,
@@ -433,7 +450,7 @@ class ParticipationWithUserResponse(BaseResponse):
     status: str
     applied_at: datetime
     decided_at: datetime | None = None
-    user: dict[str, str | None]
+    user: UserBasicInfo
 
 
 class ParticipationListResponse(BaseResponse):
@@ -448,7 +465,7 @@ class QuestionResponse(BaseResponse):
     question: str
     is_private: bool
     question_created_at: datetime
-    questioner: dict[str, str | None]
+    questioner: UserBasicInfo
 
 
 class QuestionWithAnswerResponse(BaseResponse):
@@ -458,12 +475,12 @@ class QuestionWithAnswerResponse(BaseResponse):
     is_private: bool
     question_created_at: datetime
     answer_created_at: datetime | None = None
-    questioner: dict[str, str | None]
-    answerer: dict[str, str | None] | None = None
+    questioner: UserBasicInfo
+    answerer: UserBasicInfo | None = None
 
     @classmethod
     def from_question(
-        cls, question: "QuestionAnswer", answerer_data: dict[str, Any] | None = None
+        cls, question: "QuestionAnswer", answerer_data: UserBasicInfo | None = None
     ) -> "QuestionWithAnswerResponse":
         """QuestionAnswer 모델로부터 QuestionWithAnswerResponse를 생성합니다."""
         return cls(
@@ -476,7 +493,7 @@ class QuestionWithAnswerResponse(BaseResponse):
             questioner={
                 "id": question.questioner.id,
                 "nickname": question.questioner.nickname,
-                "profile_image_url": question.questioner.profile_image_url,
+                "profile_image_path": question.questioner.profile_image_path,
             },
             answerer=answerer_data,
         )
@@ -515,13 +532,13 @@ class QuestionAnswerConverter:
         ]
 
     @staticmethod
-    def build_answerer_data(question: "QuestionAnswer") -> dict[str, Any] | None:
+    def build_answerer_data(question: "QuestionAnswer") -> UserBasicInfo | None:
         """답변자 정보를 구성합니다."""
         if question.answerer:
             return {
                 "id": question.answerer.id,
                 "nickname": question.answerer.nickname,
-                "profile_image_url": question.answerer.profile_image_url,
+                "profile_image_path": question.answerer.profile_image_path,
             }
         return None
 
@@ -562,7 +579,7 @@ class RatingWithReviewerResponse(BaseResponse):
     stars: int
     keywords: list[str] | None = None
     created_at: datetime
-    reviewer: dict[str, str | None]
+    reviewer: UserBasicInfo
 
     @classmethod
     def from_rating(cls, rating: "Rating") -> "RatingWithReviewerResponse":
@@ -578,7 +595,7 @@ class RatingWithReviewerResponse(BaseResponse):
             reviewer={
                 "id": rating.reviewer.id,
                 "nickname": rating.reviewer.nickname,
-                "profile_image_url": rating.reviewer.profile_image_url,
+                "profile_image_path": rating.reviewer.profile_image_path,
             },
         )
 

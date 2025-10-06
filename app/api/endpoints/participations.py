@@ -216,7 +216,7 @@ async def get_participants(
                 user={
                     "id": participation.user.id,
                     "nickname": participation.user.nickname,
-                    "profile_image_url": participation.user.profile_image_url,
+                    "profile_image_path": participation.user.profile_image_path,
                 },
             )
         )

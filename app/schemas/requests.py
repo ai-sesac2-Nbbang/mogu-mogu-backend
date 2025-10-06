@@ -1,6 +1,6 @@
 from datetime import date, datetime
 
-from pydantic import BaseModel, EmailStr, field_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator
 
 from app.schemas.types import (
     CategoryLiteral,
@@ -46,7 +46,7 @@ class UserUpdateRequest(BaseRequest):
 
     # 기본 정보
     nickname: str | None = None
-    profile_image_url: str | None = None
+    profile_image_path: str | None = None
 
     # 온보딩 필수 정보
     name: str | None = None
@@ -101,7 +101,7 @@ class MoguSpotRequest(BaseRequest):
 class MoguPostImageRequest(BaseRequest):
     """모구 게시물 이미지 정보"""
 
-    image_url: str
+    image_path: str
     sort_order: int
     is_thumbnail: bool
 
@@ -230,3 +230,23 @@ class RatingUpdateRequest(BaseRequest):
 
     stars: int | None = None
     keywords: list[RatingKeywordCodeLiteral] | None = None
+
+
+class PresignedUrlRequest(BaseRequest):
+    """사전 서명 URL 생성 요청"""
+
+    file_name: str = Field(..., min_length=1, max_length=255, description="파일명")
+    bucket_name: str = Field(
+        default="images", min_length=1, max_length=63, description="버킷명"
+    )
+
+
+class ImageDeleteRequest(BaseRequest):
+    """이미지 삭제 요청"""
+
+    file_paths: list[str] = Field(
+        ..., min_length=1, description="삭제할 이미지 파일 경로 목록"
+    )
+    bucket_name: str = Field(
+        default="images", min_length=1, max_length=63, description="버킷명"
+    )

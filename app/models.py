@@ -85,7 +85,7 @@ class User(Base):
     # 기본 정보 (카카오에서 가져옴)
     email: Mapped[str] = mapped_column(Text, nullable=False, unique=True, index=True)
     nickname: Mapped[str | None] = mapped_column(Text, nullable=True)
-    profile_image_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    profile_image_path: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # 온보딩 필수 정보 (추가 입력 필요)
     name: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -285,7 +285,7 @@ class MoguPostImage(Base):
     mogu_post_id: Mapped[str] = mapped_column(
         ForeignKey("mogu_post.id", ondelete="CASCADE"), nullable=False, index=True
     )
-    image_url: Mapped[str] = mapped_column(Text, nullable=False)
+    image_path: Mapped[str] = mapped_column(Text, nullable=False)
     sort_order: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
     is_thumbnail: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 

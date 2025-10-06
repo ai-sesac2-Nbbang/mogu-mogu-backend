@@ -145,10 +145,10 @@ def _extract_thumbnail_image(post: MoguPost) -> str | None:
     # 썸네일 이미지 찾기
     thumbnail_img = next((img for img in post.images if img.is_thumbnail), None)
     if thumbnail_img:
-        return thumbnail_img.image_url
+        return thumbnail_img.image_path
     else:
         # 썸네일이 없으면 첫 번째 이미지 사용
-        return post.images[0].image_url
+        return post.images[0].image_path
 
 
 async def _calculate_pagination_info(

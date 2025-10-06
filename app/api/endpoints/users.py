@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -8,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api import deps
 from app.core.database_session import get_async_session
+from app.core.supabase import get_supabase_storage
 from app.enums import UserStatusEnum
 from app.models import Rating, RatingKeywordMaster, User, UserWishSpot
 from app.schemas.requests import UserUpdateRequest, WishSpotCreateRequest
@@ -20,6 +22,7 @@ from app.schemas.responses import (
 )
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 # 상수
 MAX_WISH_SPOTS = 2
@@ -210,6 +213,19 @@ async def delete_current_user(
     # current_user.status = UserStatusEnum.INACTIVE.value
     # current_user.deactivated_at = datetime.utcnow()
     # session.add(current_user)
+
+    # 프로필 이미지가 있으면 Supabase Storage에서 삭제
+    if current_user.profile_image_path:
+        try:
+            supabase_storage = get_supabase_storage()
+            await supabase_storage.delete_files_batch(
+                "images", [current_user.profile_image_path]
+            )
+        except Exception as e:
+            # 이미지 삭제 실패해도 사용자 삭제는 진행
+            logger.warning(
+                f"프로필 이미지 삭제 실패: {current_user.profile_image_path}, 오류: {str(e)}"
+            )
 
     # 현재: 하드 삭제 (빠른 개발용)
     await session.execute(delete(User).where(User.id == current_user.id))

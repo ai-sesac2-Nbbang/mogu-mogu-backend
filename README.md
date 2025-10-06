@@ -49,10 +49,7 @@ poetry run alembic upgrade head
 poetry run uvicorn app.main:app --reload
 ```
 
-서버가 실행되면:
-
--   **API 문서**: http://localhost:8000
--   **카카오 로그인 테스트**: http://localhost:8000/login
+서버가 실행되면 [http://localhost:8000](http://localhost:8000)에서 API 문서 확인 가능
 
 ## 📚 문서
 
