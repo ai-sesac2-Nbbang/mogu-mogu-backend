@@ -239,3 +239,14 @@ class PresignedUrlRequest(BaseRequest):
     bucket_name: str = Field(
         default="images", min_length=1, max_length=63, description="버킷명"
     )
+
+
+class ImageDeleteRequest(BaseRequest):
+    """이미지 삭제 요청"""
+
+    file_paths: list[str] = Field(
+        ..., min_items=1, description="삭제할 이미지 파일 경로 목록"
+    )
+    bucket_name: str = Field(
+        default="images", min_length=1, max_length=63, description="버킷명"
+    )

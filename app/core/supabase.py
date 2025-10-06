@@ -25,10 +25,13 @@ class SupabaseStorage:
             settings.supabase.url, settings.supabase.service_role_key.get_secret_value()
         )
 
-    async def delete_file(self, bucket_name: str, file_path: str) -> bool:
-        """파일 삭제"""
+    async def delete_files_batch(self, bucket_name: str, file_paths: list[str]) -> bool:
+        """파일 삭제 (다중 파일)"""
         try:
-            result = self.client.storage.from_(bucket_name).remove([file_path])
+            if not file_paths:
+                return True
+
+            result = self.client.storage.from_(bucket_name).remove(file_paths)
 
             # remove 메서드는 리스트를 반환하므로 리스트로 처리
             if isinstance(result, list):
@@ -45,7 +48,7 @@ class SupabaseStorage:
 
             return True
         except Exception as e:
-            raise Exception(f"파일 삭제 중 오류: {str(e)}")
+            raise Exception(f"배치 파일 삭제 중 오류: {str(e)}")
 
     async def create_presigned_url(
         self, bucket_name: str, file_path: str, expires_in: int = 3600

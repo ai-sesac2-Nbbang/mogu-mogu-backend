@@ -552,14 +552,15 @@ async def delete_mogu_post(
     # 삭제 가능한 상태인지 확인
     await _validate_post_status_for_deletion(mogu_post)
 
-    # 이미지들을 Supabase Storage에서 삭제
+    # 이미지들을 Supabase Storage에서 배치 삭제
     if mogu_post.images:
-        supabase_storage = get_supabase_storage()
-        for img in mogu_post.images:
-            try:
-                await supabase_storage.delete_file("images", img.image_path)
-            except Exception as e:
-                logger.warning(f"이미지 삭제 실패: {img.image_path}, 오류: {str(e)}")
+        try:
+            supabase_storage = get_supabase_storage()
+            image_paths = [img.image_path for img in mogu_post.images]
+            await supabase_storage.delete_files_batch("images", image_paths)
+            logger.info(f"게시물 이미지 {len(image_paths)}개 배치 삭제 완료")
+        except Exception as e:
+            logger.warning(f"이미지 배치 삭제 실패: {str(e)}")
 
     # 게시물 삭제 (CASCADE로 관련 데이터도 함께 삭제됨)
     await session.delete(mogu_post)

@@ -218,8 +218,8 @@ async def delete_current_user(
     if current_user.profile_image_path:
         try:
             supabase_storage = get_supabase_storage()
-            await supabase_storage.delete_file(
-                "images", current_user.profile_image_path
+            await supabase_storage.delete_files_batch(
+                "images", [current_user.profile_image_path]
             )
         except Exception as e:
             # 이미지 삭제 실패해도 사용자 삭제는 진행

@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from app.api import deps
 from app.core.supabase import get_supabase_storage
 from app.models import User
-from app.schemas.requests import PresignedUrlRequest
+from app.schemas.requests import ImageDeleteRequest, PresignedUrlRequest
 from app.schemas.responses import PresignedUrlResponse
 
 router = APIRouter()
@@ -51,32 +51,36 @@ async def create_presigned_upload_url(
         )
 
 
-@router.delete("/{file_path:path}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_image(
-    file_path: str,
-    bucket_name: str = "images",
+@router.delete(
+    "",
+    status_code=status.HTTP_204_NO_CONTENT,
+    description="이미지 삭제 (단일 또는 다중)",
+)
+async def delete_images(
+    data: ImageDeleteRequest,
     current_user: User = Depends(deps.get_current_user),
 ) -> None:
     """
-    이미지 삭제
+    이미지 삭제 (단일 또는 다중)
 
-    - **file_path**: 삭제할 이미지 파일 경로 (예: user123/uuid.jpg)
+    - **file_paths**: 삭제할 이미지 파일 경로 목록 (1개 이상)
     - **bucket_name**: Supabase Storage 버킷명
     """
     try:
-        # 파일 경로에서 사용자 ID 추출하여 권한 확인
-        # 경로 형식: {user_id}/{uuid}.{extension}
-        path_parts = file_path.split("/")
-        PATH_PARTS_LENGTH = 2
-        if len(path_parts) != PATH_PARTS_LENGTH or path_parts[0] != current_user.id:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="이미지를 삭제할 권한이 없습니다",
-            )
+        # 각 파일 경로에 대해 권한 확인
+        for file_path in data.file_paths:
+            # 경로 형식: {user_id}/{uuid}.{extension}
+            path_parts = file_path.split("/")
+            PATH_PARTS_LENGTH = 2
+            if len(path_parts) != PATH_PARTS_LENGTH or path_parts[0] != current_user.id:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail=f"이미지를 삭제할 권한이 없습니다: {file_path}",
+                )
 
-        # Supabase Storage에서 파일 삭제
+        # Supabase Storage에서 파일들 삭제
         supabase_storage = get_supabase_storage()
-        await supabase_storage.delete_file(bucket_name, file_path)
+        await supabase_storage.delete_files_batch(data.bucket_name, data.file_paths)
 
     except HTTPException:
         raise
