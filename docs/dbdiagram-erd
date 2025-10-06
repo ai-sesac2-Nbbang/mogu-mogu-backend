@@ -78,7 +78,7 @@ Table app_user {
   
   email             text        [not null, unique]
   nickname          text
-  profile_image_url text
+  profile_image_path text
   
   name              text
   phone_number      text
@@ -149,7 +149,7 @@ Table mogu_post {
 Table mogu_post_image {
   id          uuid        [pk, default: `gen_random_uuid()`]
   mogu_post_id uuid       [not null]
-  image_url   text        [not null, note: 'S3 또는 Supabase Storage 경로']
+  image_path  text        [not null, note: 'Supabase Storage 파일 경로']
   sort_order  int         [default: 0, note: '정렬 순서']
   is_thumbnail boolean    [default: false, note: '대표 이미지 여부']
   created_at  timestamptz [not null, default: `now()`]
