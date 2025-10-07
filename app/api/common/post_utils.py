@@ -12,7 +12,7 @@ from sqlalchemy.orm import selectinload
 
 from app.api import api_messages
 from app.enums import PostStatusEnum
-from app.models import MoguFavorite, MoguPost, Participation, User
+from app.models import MoguComment, MoguFavorite, MoguPost, Participation, User
 from app.schemas.responses import PaginationInfo, ParticipationInfo
 
 
@@ -47,7 +47,7 @@ async def _get_mogu_post_with_relations(
         .options(
             selectinload(MoguPost.images),
             selectinload(MoguPost.user),
-            selectinload(MoguPost.questions_answers),
+            selectinload(MoguPost.comments).selectinload(MoguComment.user),
         )
         .where(MoguPost.id == post_id)
     )

@@ -6,9 +6,9 @@ from pydantic import BaseModel, ConfigDict, EmailStr
 
 if TYPE_CHECKING:
     from app.models import (
+        MoguComment,
         MoguPost,
         Participation,
-        QuestionAnswer,
         Rating,
         RatingKeywordMaster,
         User,
@@ -67,17 +67,14 @@ class UserBasicInfo(TypedDict):
     profile_image_path: str | None
 
 
-class QuestionAnswerInfo(TypedDict):
-    """질문답변 정보 타입"""
+class CommentInfo(TypedDict):
+    """댓글 정보 타입"""
 
     id: str
-    questioner_id: str
-    question: str
-    answerer_id: str | None
-    answer: str | None
-    is_private: bool
-    question_created_at: str
-    answer_created_at: str | None
+    user_id: str
+    content: str
+    created_at: str
+    user: UserBasicInfo
 
 
 class BaseResponse(BaseModel):
@@ -286,15 +283,12 @@ class MoguPostParticipationResponse(BaseResponse):
     joined_at: datetime | None = None
 
 
-class QuestionAnswerResponse(BaseResponse):
+class CommentResponse(BaseResponse):
     id: str
-    questioner_id: str
-    question: str
-    answerer_id: str | None = None
-    answer: str | None = None
-    is_private: bool
-    question_created_at: datetime
-    answer_created_at: datetime | None = None
+    user_id: str
+    content: str
+    created_at: datetime
+    user: UserBasicInfo
 
 
 class MoguPostResponse(BaseResponse):
@@ -316,7 +310,7 @@ class MoguPostResponse(BaseResponse):
     user: UserBasicInfo
     my_participation: ParticipationInfo | None = None
     is_favorited: bool | None = None
-    questions_answers: list[QuestionAnswerInfo] | None = None
+    comments: list[CommentInfo] | None = None
 
     @classmethod
     def from_mogu_post(
@@ -324,7 +318,7 @@ class MoguPostResponse(BaseResponse):
         mogu_post: "MoguPost",
         my_participation: ParticipationInfo | None = None,
         is_favorited: bool = False,
-        questions_answers: list[QuestionAnswerInfo] | None = None,
+        comments: list[CommentInfo] | None = None,
     ) -> "MoguPostResponse":
         """MoguPost 모델로부터 MoguPostResponse를 생성합니다."""
         # Shapely를 사용한 위도/경도 추출
@@ -365,7 +359,7 @@ class MoguPostResponse(BaseResponse):
             },
             my_participation=my_participation,
             is_favorited=is_favorited,
-            questions_answers=questions_answers,
+            comments=comments,
         )
 
 
@@ -457,90 +451,35 @@ class ParticipationListResponse(BaseResponse):
     items: list[ParticipationWithUserResponse]
 
 
-# Q&A 관련 Response 스키마
-class QuestionResponse(BaseResponse):
-    id: str
-    mogu_post_id: str
-    questioner_id: str
-    question: str
-    is_private: bool
-    question_created_at: datetime
-    questioner: UserBasicInfo
-
-
-class QuestionWithAnswerResponse(BaseResponse):
-    id: str
-    question: str
-    answer: str | None = None
-    is_private: bool
-    question_created_at: datetime
-    answer_created_at: datetime | None = None
-    questioner: UserBasicInfo
-    answerer: UserBasicInfo | None = None
-
-    @classmethod
-    def from_question(
-        cls, question: "QuestionAnswer", answerer_data: UserBasicInfo | None = None
-    ) -> "QuestionWithAnswerResponse":
-        """QuestionAnswer 모델로부터 QuestionWithAnswerResponse를 생성합니다."""
-        return cls(
-            id=question.id,
-            question=question.question,
-            answer=question.answer,
-            is_private=question.is_private,
-            question_created_at=question.question_created_at,
-            answer_created_at=question.answer_created_at,
-            questioner={
-                "id": question.questioner.id,
-                "nickname": question.questioner.nickname,
-                "profile_image_path": question.questioner.profile_image_path,
-            },
-            answerer=answerer_data,
-        )
-
-
-class QuestionListResponse(BaseResponse):
-    items: list[QuestionWithAnswerResponse]
+# 댓글 관련 Response 스키마
 
 
 # 유틸리티 클래스
-class QuestionAnswerConverter:
-    """Q&A 데이터 변환을 위한 유틸리티 클래스"""
+class CommentConverter:
+    """댓글 데이터 변환을 위한 유틸리티 클래스"""
 
     @staticmethod
     def to_dict_list(
-        questions_answers: list["QuestionAnswer"] | None,
-    ) -> list[QuestionAnswerInfo] | None:
-        """Q&A 데이터를 딕셔너리 형태로 변환합니다."""
-        if not questions_answers:
+        comments: list["MoguComment"] | None,
+    ) -> list[CommentInfo] | None:
+        """댓글 데이터를 딕셔너리 형태로 변환합니다."""
+        if not comments:
             return None
 
         return [
             {
-                "id": qa.id,
-                "questioner_id": qa.questioner_id,
-                "question": qa.question,
-                "answerer_id": qa.answerer_id,
-                "answer": qa.answer,
-                "is_private": qa.is_private,
-                "question_created_at": qa.question_created_at.isoformat(),
-                "answer_created_at": (
-                    qa.answer_created_at.isoformat() if qa.answer_created_at else None
-                ),
+                "id": comment.id,
+                "user_id": comment.user_id,
+                "content": comment.content,
+                "created_at": comment.created_at.isoformat(),
+                "user": {
+                    "id": comment.user.id,
+                    "nickname": comment.user.nickname,
+                    "profile_image_path": comment.user.profile_image_path,
+                },
             }
-            for qa in questions_answers
+            for comment in comments
         ]
-
-    @staticmethod
-    def build_answerer_data(question: "QuestionAnswer") -> UserBasicInfo | None:
-        """답변자 정보를 구성합니다."""
-        if question.answerer:
-            return {
-                "id": question.answerer.id,
-                "nickname": question.answerer.nickname,
-                "profile_image_path": question.answerer.profile_image_path,
-            }
-        return None
 
 
 # 평가 관련 Response 스키마

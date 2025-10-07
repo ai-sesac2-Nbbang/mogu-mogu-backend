@@ -20,7 +20,7 @@ from .post_utils import (
     _validate_post_status_for_deletion,
 )
 from .validation_utils import (
-    _check_qa_activity_allowed,
+    _check_comment_activity_allowed,
     _check_user_participation_status,
     _validate_rating_permissions,
 )
@@ -41,7 +41,7 @@ __all__ = [
     # Types
     "MoguPostBasicData",
     # Validation utilities
-    "_check_qa_activity_allowed",
+    "_check_comment_activity_allowed",
     "_check_user_participation_status",
     "_validate_rating_permissions",
 ]
