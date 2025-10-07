@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database_session import get_async_session
 from app.models import Rating, RatingKeywordMaster, User
 from app.schemas.responses import (
+    RatingDistribution,
     UserKeywordStatsListResponse,
     UserKeywordStatsResponse,
     UserRatingStatsResponse,
@@ -141,18 +142,18 @@ async def get_user_rating_stats(
     distribution_result = await session.execute(distribution_query)
     distribution_rows = distribution_result.all()
 
-    # 분포 딕셔너리 초기화 (1점~5점 모두 0으로)
-    rating_distribution = {i: 0 for i in range(1, 6)}
+    # 분포 데이터 준비
+    distribution_data = {"1": 0, "2": 0, "3": 0, "4": 0, "5": 0}
 
     # 실제 데이터로 업데이트
     for row in distribution_rows:
-        stars = int(row.stars)
+        stars = str(int(row.stars))
         count = int(row.count_value)
-        rating_distribution[stars] = count
+        distribution_data[stars] = count
 
     return UserRatingStatsResponse(
         user_id=user_id,
         average_rating=round(average_rating, 2),
         total_ratings=total_ratings,
-        rating_distribution=rating_distribution,
+        rating_distribution=RatingDistribution(**distribution_data),
     )
