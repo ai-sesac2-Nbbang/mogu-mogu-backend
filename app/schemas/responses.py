@@ -219,10 +219,11 @@ class ReviewableUserResponse(BaseResponse):
         rating_id: str | None = None,
     ) -> "ReviewableUserResponse":
         """Participation 모델로부터 ReviewableUserResponse를 생성합니다."""
+        user_info = UserConverter.to_user_basic_info(participation.user)
         return cls(
-            user_id=participation.user.id,
-            nickname=participation.user.nickname or "익명",
-            profile_image_path=participation.user.profile_image_path,
+            user_id=user_info["id"],
+            nickname=user_info["nickname"] or "익명",
+            profile_image_path=user_info["profile_image_path"],
             participation_status=participation.status,
             rating_id=rating_id,
         )
@@ -235,10 +236,11 @@ class ReviewableUserResponse(BaseResponse):
         rating_id: str | None = None,
     ) -> "ReviewableUserResponse":
         """User 모델로부터 ReviewableUserResponse를 생성합니다."""
+        user_info = UserConverter.to_user_basic_info(user)
         return cls(
-            user_id=user.id,
-            nickname=user.nickname or "익명",
-            profile_image_path=user.profile_image_path,
+            user_id=user_info["id"],
+            nickname=user_info["nickname"] or "익명",
+            profile_image_path=user_info["profile_image_path"],
             participation_status=participation_status,
             rating_id=rating_id,
         )
@@ -270,17 +272,6 @@ class MoguPostImageResponse(BaseResponse):
     image_path: str
     sort_order: int
     is_thumbnail: bool
-
-
-class MoguPostUserResponse(BaseResponse):
-    id: str
-    nickname: str
-    profile_image_path: str | None = None
-
-
-class MoguPostParticipationResponse(BaseResponse):
-    status: str
-    joined_at: datetime | None = None
 
 
 class CommentResponse(BaseResponse):
@@ -352,11 +343,7 @@ class MoguPostResponse(BaseResponse):
                 }
                 for img in mogu_post.images
             ],
-            user={
-                "id": mogu_post.user.id,
-                "nickname": mogu_post.user.nickname,
-                "profile_image_path": mogu_post.user.profile_image_path,
-            },
+            user=UserConverter.to_user_basic_info(mogu_post.user),
             my_participation=my_participation,
             is_favorited=is_favorited,
             comments=comments,
@@ -455,6 +442,19 @@ class ParticipationListResponse(BaseResponse):
 
 
 # 유틸리티 클래스
+class UserConverter:
+    """사용자 정보 변환을 위한 유틸리티 클래스"""
+
+    @staticmethod
+    def to_user_basic_info(user: "User") -> UserBasicInfo:
+        """User 모델을 UserBasicInfo로 변환합니다."""
+        return {
+            "id": user.id,
+            "nickname": user.nickname,
+            "profile_image_path": user.profile_image_path,
+        }
+
+
 class CommentConverter:
     """댓글 데이터 변환을 위한 유틸리티 클래스"""
 
@@ -472,11 +472,7 @@ class CommentConverter:
                 "user_id": comment.user_id,
                 "content": comment.content,
                 "created_at": comment.created_at.isoformat(),
-                "user": {
-                    "id": comment.user.id,
-                    "nickname": comment.user.nickname,
-                    "profile_image_path": comment.user.profile_image_path,
-                },
+                "user": UserConverter.to_user_basic_info(comment.user),
             }
             for comment in comments
         ]
@@ -531,11 +527,7 @@ class RatingWithReviewerResponse(BaseResponse):
             stars=rating.stars,
             keywords=rating.keywords,
             created_at=rating.created_at,
-            reviewer={
-                "id": rating.reviewer.id,
-                "nickname": rating.reviewer.nickname,
-                "profile_image_path": rating.reviewer.profile_image_path,
-            },
+            reviewer=UserConverter.to_user_basic_info(rating.reviewer),
         )
 
 

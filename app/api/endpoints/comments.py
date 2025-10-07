@@ -9,7 +9,7 @@ from app.api.common import _check_comment_activity_allowed, _get_mogu_post
 from app.core.database_session import get_async_session
 from app.models import MoguComment, User
 from app.schemas.requests import CommentCreateRequest
-from app.schemas.responses import CommentResponse
+from app.schemas.responses import CommentResponse, UserConverter
 
 router = APIRouter()
 
@@ -75,11 +75,7 @@ async def create_comment(
         user_id=comment.user_id,
         content=comment.content,
         created_at=comment.created_at,
-        user={
-            "id": comment.user.id,
-            "nickname": comment.user.nickname,
-            "profile_image_path": comment.user.profile_image_path,
-        },
+        user=UserConverter.to_user_basic_info(comment.user),
     )
 
 

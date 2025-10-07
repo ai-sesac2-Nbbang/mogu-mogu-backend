@@ -15,6 +15,7 @@ from app.schemas.responses import (
     ParticipationListResponse,
     ParticipationResponse,
     ParticipationWithUserResponse,
+    UserConverter,
 )
 
 router = APIRouter()
@@ -213,11 +214,7 @@ async def get_participants(
                 status=participation.status,
                 applied_at=participation.applied_at,
                 decided_at=participation.decided_at,
-                user={
-                    "id": participation.user.id,
-                    "nickname": participation.user.nickname,
-                    "profile_image_path": participation.user.profile_image_path,
-                },
+                user=UserConverter.to_user_basic_info(participation.user),
             )
         )
 
