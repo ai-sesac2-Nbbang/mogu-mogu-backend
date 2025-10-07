@@ -157,21 +157,14 @@ Table mogu_post_image {
   Note: '모구 게시물 이미지'
 }
 
-Table question_answer {
+Table mogu_comment {
   id           uuid        [pk, default: `gen_random_uuid()`]
   mogu_post_id uuid        [not null]
+  user_id      uuid        [not null, note: '댓글 작성자']
+  content      text        [not null]
+  created_at   timestamptz [not null, default: `now()`]
 
-  questioner_id      uuid        [not null, note: '질문 작성자']
-  question     text        [not null]
-
-  answerer_id        uuid        [note: '답변자(보통 모구장)']
-  answer       text
-  
-  is_private   boolean     [not null, default: false]
-  question_created_at timestamptz [not null, default: `now()`]
-  answer_created_at   timestamptz
-
-  Note: 'Q&A (비공개: 작성자/모구장만 열람)'
+  Note: '모구 게시물 댓글'
 }
 
 Table participation {
@@ -237,9 +230,8 @@ Ref: mogu_post.user_id > app_user.id
 
 Ref: mogu_post_image.mogu_post_id > mogu_post.id
 
-Ref: question_answer.mogu_post_id > mogu_post.id
-Ref: question_answer.questioner_id > app_user.id
-Ref: question_answer.answerer_id  > app_user.id
+Ref: mogu_comment.mogu_post_id > mogu_post.id
+Ref: mogu_comment.user_id > app_user.id
 
 Ref: participation.user_id > app_user.id
 Ref: participation.mogu_post_id > mogu_post.id
