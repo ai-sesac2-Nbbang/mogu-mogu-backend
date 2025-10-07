@@ -33,6 +33,7 @@ from app.schemas.requests import (
     MoguPostUpdateRequest,
 )
 from app.schemas.responses import (
+    CommentConverter,
     MoguPostListItemResponse,
     MoguPostListItemWithReviewResponse,
     MoguPostListPaginatedResponse,
@@ -40,7 +41,6 @@ from app.schemas.responses import (
     MoguPostResponse,
     MoguPostWithParticipationPaginatedResponse,
     MoguPostWithParticipationResponse,
-    QuestionAnswerConverter,
 )
 from app.schemas.types import ParticipationStatusLiteral, PostStatusLiteral
 
@@ -437,16 +437,14 @@ async def get_mogu_post(
         )
         is_favorited = await _check_favorite_status(post_id, current_user.id, session)
 
-    # Q&A 데이터 변환
-    questions_answers = QuestionAnswerConverter.to_dict_list(
-        mogu_post.questions_answers
-    )
+    # 댓글 데이터 변환
+    comments = CommentConverter.to_dict_list(mogu_post.comments)
 
     return MoguPostResponse.from_mogu_post(
         mogu_post=mogu_post,
         my_participation=my_participation,
         is_favorited=is_favorited,
-        questions_answers=questions_answers,
+        comments=comments,
     )
 
 

@@ -188,31 +188,11 @@ class ParticipationStatusUpdateRequest(BaseRequest):
     status: ParticipationStatusLiteral
 
 
-# Q&A 관련 Request 스키마
-class QuestionCreateRequest(BaseRequest):
-    """질문 작성"""
+# 댓글 관련 Request 스키마
+class CommentCreateRequest(BaseRequest):
+    """댓글 작성"""
 
-    question: str
-    is_private: bool = False
-
-
-class AnswerCreateRequest(BaseRequest):
-    """답변 작성"""
-
-    answer: str
-
-
-class QuestionUpdateRequest(BaseRequest):
-    """질문 수정"""
-
-    question: str
-    is_private: bool | None = None
-
-
-class AnswerUpdateRequest(BaseRequest):
-    """답변 수정"""
-
-    answer: str
+    content: str
 
 
 # 평가 관련 Request 스키마
