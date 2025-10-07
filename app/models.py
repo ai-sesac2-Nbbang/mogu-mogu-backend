@@ -168,11 +168,8 @@ class User(Base):
     )
     refresh_tokens: Mapped[list["RefreshToken"]] = relationship(back_populates="user")
     mogu_posts: Mapped[list["MoguPost"]] = relationship(back_populates="user")
-    questions_asked: Mapped[list["QuestionAnswer"]] = relationship(
-        foreign_keys="QuestionAnswer.questioner_id", back_populates="questioner"
-    )
-    answers_given: Mapped[list["QuestionAnswer"]] = relationship(
-        foreign_keys="QuestionAnswer.answerer_id", back_populates="answerer"
+    comments: Mapped[list["MoguComment"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
     )
     participations: Mapped[list["Participation"]] = relationship(back_populates="user")
     ratings_given: Mapped[list["Rating"]] = relationship(
@@ -260,7 +257,7 @@ class MoguPost(Base):
     images: Mapped[list["MoguPostImage"]] = relationship(
         back_populates="mogu_post", cascade="all, delete-orphan"
     )
-    questions_answers: Mapped[list["QuestionAnswer"]] = relationship(
+    comments: Mapped[list["MoguComment"]] = relationship(
         back_populates="mogu_post", cascade="all, delete-orphan"
     )
     participations: Mapped[list["Participation"]] = relationship(
@@ -292,10 +289,10 @@ class MoguPostImage(Base):
     mogu_post: Mapped["MoguPost"] = relationship(back_populates="images")
 
 
-class QuestionAnswer(Base):
-    """Q&A (비공개: 작성자/모구장만 열람)"""
+class MoguComment(Base):
+    """모구 게시물 댓글"""
 
-    __tablename__ = "question_answer"
+    __tablename__ = "mogu_comment"
 
     id: Mapped[str] = mapped_column(
         String(36), primary_key=True, default=lambda _: str(uuid.uuid4())
@@ -303,32 +300,13 @@ class QuestionAnswer(Base):
     mogu_post_id: Mapped[str] = mapped_column(
         ForeignKey("mogu_post.id", ondelete="CASCADE"), nullable=False, index=True
     )
-
-    questioner_id: Mapped[str] = mapped_column(
+    user_id: Mapped[str] = mapped_column(
         ForeignKey("app_user.id", ondelete="CASCADE"), nullable=False, index=True
     )
-    question: Mapped[str] = mapped_column(Text, nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
 
-    answerer_id: Mapped[str | None] = mapped_column(
-        ForeignKey("app_user.id", ondelete="SET NULL"), nullable=True
-    )
-    answer: Mapped[str | None] = mapped_column(Text, nullable=True)
-
-    is_private: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    question_created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, server_default=func.now()
-    )
-    answer_created_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
-
-    mogu_post: Mapped["MoguPost"] = relationship(back_populates="questions_answers")
-    questioner: Mapped["User"] = relationship(
-        foreign_keys=[questioner_id], back_populates="questions_asked"
-    )
-    answerer: Mapped["User | None"] = relationship(
-        foreign_keys=[answerer_id], back_populates="answers_given"
-    )
+    mogu_post: Mapped["MoguPost"] = relationship(back_populates="comments")
+    user: Mapped["User"] = relationship(back_populates="comments")
 
 
 class Participation(Base):
