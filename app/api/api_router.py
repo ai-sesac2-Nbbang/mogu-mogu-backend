@@ -9,6 +9,7 @@ from app.api.endpoints import (
     mogu_posts,
     participations,
     ratings,
+    stats,
     users,
 )
 
@@ -41,6 +42,7 @@ api_router = APIRouter(
     }
 )
 api_router.include_router(users.router, prefix="/users", tags=["users"])
+api_router.include_router(stats.router, prefix="", tags=["stats"])
 api_router.include_router(favorites.router, prefix="/mogu-posts", tags=["favorites"])
 api_router.include_router(mogu_posts.router, prefix="/mogu-posts", tags=["mogu-posts"])
 api_router.include_router(

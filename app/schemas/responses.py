@@ -2,7 +2,7 @@ from datetime import date, datetime
 from typing import TYPE_CHECKING, TypedDict
 
 from geoalchemy2.shape import to_shape
-from pydantic import BaseModel, ConfigDict, EmailStr
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 if TYPE_CHECKING:
     from app.models import (
@@ -561,3 +561,24 @@ class UserKeywordStatsListResponse(BaseResponse):
     """사용자 키워드 통계 목록 응답"""
 
     items: list[UserKeywordStatsResponse]
+
+
+class RatingDistribution(BaseModel):
+    """별점별 분포"""
+
+    one: int = Field(..., alias="1", description="1점 평가 수")
+    two: int = Field(..., alias="2", description="2점 평가 수")
+    three: int = Field(..., alias="3", description="3점 평가 수")
+    four: int = Field(..., alias="4", description="4점 평가 수")
+    five: int = Field(..., alias="5", description="5점 평가 수")
+
+    model_config = ConfigDict(populate_by_name=True)  # alias 이름으로 입력 허용
+
+
+class UserRatingStatsResponse(BaseResponse):
+    """사용자 별점 통계 응답"""
+
+    user_id: str
+    average_rating: float
+    total_ratings: int
+    rating_distribution: RatingDistribution
