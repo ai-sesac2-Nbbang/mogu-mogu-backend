@@ -15,7 +15,6 @@ from app.schemas.types import (
 
 # 상수
 WISH_TIMES_LENGTH = 24
-MIN_TARGET_COUNT = 1
 
 
 class BaseRequest(BaseModel):
@@ -111,27 +110,24 @@ class MoguPostCreateRequest(BaseRequest):
 
     title: str
     description: str
-    price: int
-    labor_fee: int = 0
+    price: int = Field(gt=0, description="가격 (0보다 큰 값)")
+    labor_fee: int = Field(default=0, ge=0, description="수고비 (0 이상)")
     category: CategoryLiteral
     mogu_market: MarketLiteral
     mogu_spot: MoguSpotRequest
     mogu_datetime: datetime
-    target_count: int
+    target_count: int = Field(ge=1, description="목표 인원 (1명 이상)")
     images: list[MoguPostImageRequest] | None = None
 
-    @field_validator("target_count")
+    @field_validator("mogu_datetime")
     @classmethod
-    def validate_target_count(cls, v: int) -> int:
-        if v < MIN_TARGET_COUNT:
-            raise ValueError(f"target_count는 {MIN_TARGET_COUNT} 이상이어야 합니다.")
-        return v
+    def validate_mogu_datetime(cls, v: datetime) -> datetime:
+        """모구 일시 검증: 미래 날짜여야 함"""
+        now = datetime.now()
 
-    @field_validator("price")
-    @classmethod
-    def validate_price(cls, v: int) -> int:
-        if v <= 0:
-            raise ValueError("price는 0보다 커야 합니다.")
+        if v <= now:
+            raise ValueError("모구 일시는 미래 날짜여야 합니다.")
+
         return v
 
 
@@ -140,45 +136,49 @@ class MoguPostUpdateRequest(BaseRequest):
 
     title: str | None = None
     description: str | None = None
-    price: int | None = None
-    labor_fee: int | None = None
+    price: int | None = Field(default=None, gt=0, description="가격 (0보다 큰 값)")
+    labor_fee: int | None = Field(default=None, ge=0, description="수고비 (0 이상)")
     category: CategoryLiteral | None = None
     mogu_market: MarketLiteral | None = None
     mogu_spot: MoguSpotRequest | None = None
     mogu_datetime: datetime | None = None
-    target_count: int | None = None
+    target_count: int | None = Field(
+        default=None, ge=1, description="목표 인원 (1명 이상)"
+    )
     status: PostStatusLiteral | None = None
     images: list[MoguPostImageRequest] | None = None
 
-    @field_validator("target_count")
+    @field_validator("mogu_datetime")
     @classmethod
-    def validate_target_count(cls, v: int | None) -> int | None:
-        if v is not None and v < MIN_TARGET_COUNT:
-            raise ValueError(f"target_count는 {MIN_TARGET_COUNT} 이상이어야 합니다.")
-        return v
+    def validate_mogu_datetime(cls, v: datetime | None) -> datetime | None:
+        """모구 일시 검증: 미래 날짜여야 함"""
+        if v is None:
+            return v
 
-    @field_validator("price")
-    @classmethod
-    def validate_price(cls, v: int | None) -> int | None:
-        if v is not None and v <= 0:
-            raise ValueError("price는 0보다 커야 합니다.")
+        now = datetime.now()
+
+        if v <= now:
+            raise ValueError("모구 일시는 미래 날짜여야 합니다.")
+
         return v
 
 
 class MoguPostListQueryParams(BaseRequest):
     """모구 게시물 목록 조회 쿼리 파라미터"""
 
-    page: int = 1
-    size: int = 20
+    page: int = Field(default=1, ge=1, description="페이지 번호 (1번 이상)")
+    size: int = Field(default=20, ge=1, description="페이지당 항목 수 (1개 이상)")
     sort: SortLiteral = "ai_recommended"
     category: CategoryLiteral | None = None
     mogu_market: MarketLiteral | None = None
     status: PostStatusLiteral | None = (
         "recruiting"  # 기본값은 recruiting, None이면 모든 상태 조회
     )
-    latitude: float  # 필수 파라미터로 변경
-    longitude: float  # 필수 파라미터로 변경
-    radius: float = 3.0
+    latitude: float = Field(ge=-90, le=90, description="위도 (-90~90)")
+    longitude: float = Field(ge=-180, le=180, description="경도 (-180~180)")
+    radius: float = Field(
+        default=3.0, ge=0.1, le=10, description="검색 반경 (0.1~10km)"
+    )
 
 
 # 참여 관련 Request 스키마
@@ -201,14 +201,14 @@ class RatingCreateRequest(BaseRequest):
 
     mogu_post_id: str
     reviewee_id: str
-    stars: int
+    stars: int = Field(ge=1, le=5, description="별점 (1-5)")
     keywords: list[RatingKeywordCodeLiteral] | None = None
 
 
 class RatingUpdateRequest(BaseRequest):
     """평가 수정"""
 
-    stars: int | None = None
+    stars: int | None = Field(default=None, ge=1, le=5, description="별점 (1-5)")
     keywords: list[RatingKeywordCodeLiteral] | None = None
 
 
