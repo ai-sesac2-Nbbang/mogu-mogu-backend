@@ -561,3 +561,12 @@ class UserKeywordStatsListResponse(BaseResponse):
     """사용자 키워드 통계 목록 응답"""
 
     items: list[UserKeywordStatsResponse]
+
+
+class UserRatingStatsResponse(BaseResponse):
+    """사용자 별점 통계 응답"""
+
+    user_id: str
+    average_rating: float
+    total_ratings: int
+    rating_distribution: dict[int, int]  # {1: 0, 2: 1, 3: 2, 4: 3, 5: 4}
