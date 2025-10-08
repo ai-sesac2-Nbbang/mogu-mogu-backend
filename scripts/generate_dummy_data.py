@@ -10,11 +10,17 @@
 """
 
 import asyncio
+import copy
+import gzip
+import heapq
 import json
+import logging
 import math
 import random
 import uuid
-from datetime import date, datetime, timedelta
+from collections import defaultdict
+from dataclasses import dataclass
+from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
 # 상수 정의
@@ -27,6 +33,36 @@ ACTIVE_USER_PROBABILITY = 0.8  # 80% 확률
 FRESHNESS_HOURS = 24  # 24시간
 MAX_CATEGORIES = 3  # 최대 카테고리 수
 MAX_MARKETS = 3  # 최대 마켓 수
+
+# 한국 시간대 설정
+KST = timezone(timedelta(hours=9))
+
+# 재현성을 위한 고정 기준 시각 (KST)
+BASE_NOW = datetime(
+    2025, 10, 8, 15, 0, 0, tzinfo=KST
+)  # 2025년 10월 8일 오후 3시 (발표 직전)
+
+# 발표일 보장 상수 (KST)
+PRESENTATION_DAY = datetime(2025, 10, 13, 0, 0, 0, tzinfo=KST)  # 발표일: 10월 13일
+
+
+@dataclass(frozen=True)
+class Config:
+    """더미 데이터 생성 설정"""
+
+    num_users: int = 1000
+    num_posts: int = 5000
+    recruiting_quota_ratio: float = 0.2
+    max_candidates_k: int = 800
+    max_distance_km: float = 6.0
+    min_candidates_threshold: int = 300
+    cache_precision_digits: int = 5  # 거리 캐시 정규화 (≈1m)
+
+
+CFG = Config()
+
+# 성능 최적화 상수 (Config로 이전됨)
+MIN_CANDIDATES_THRESHOLD = CFG.min_candidates_threshold
 STUDENT_COST_THRESHOLDS = {
     "very_low": 5000,
     "low": 8000,
@@ -48,6 +84,17 @@ NO_SHOW_PROBABILITY = 0.02  # 2% 확률
 RATING_PROBABILITY = 0.7  # 70% 확률
 RATING_THRESHOLD_HIGH = 4  # 높은 평점 임계값
 RATING_THRESHOLD_LOW = 2  # 낮은 평점 임계값
+
+
+def unique_keep_order(seq: list[Any]) -> list[Any]:
+    """순서를 보존하면서 중복 제거 (재현성 보장)"""
+    seen = set()
+    out = []
+    for x in seq:
+        if x not in seen:
+            seen.add(x)
+            out.append(x)
+    return out
 
 
 def make_wish_times(hours: tuple[int, ...]) -> list[int]:
@@ -285,23 +332,56 @@ def generate_random_location() -> tuple[float, float]:
 
 
 def generate_realistic_datetime(days_back: int = 30) -> datetime:
-    """현실적인 날짜/시간 생성"""
-    now = datetime.now()
+    """현실적인 날짜/시간 생성 (BASE_NOW 기준)"""
     random_days = random.randint(0, days_back)
     random_hours = random.randint(0, 23)
     random_minutes = random.randint(0, 59)
 
-    return now - timedelta(days=random_days, hours=random_hours, minutes=random_minutes)
+    return BASE_NOW - timedelta(
+        days=random_days, hours=random_hours, minutes=random_minutes
+    )
+
+
+def after_time(base_time: datetime, min_minutes: int, max_minutes: int) -> datetime:
+    """기준 시간 이후의 시간 생성 (단조 증가 보장)"""
+    minutes_offset = random.randint(min_minutes, max_minutes)
+    return base_time + timedelta(minutes=minutes_offset)
+
+
+def clamp_after(t: datetime, min_t: datetime) -> datetime:
+    """시간이 최소 시간 이후가 되도록 클램프"""
+    return t if t >= min_t else min_t + timedelta(minutes=random.randint(1, 30))
+
+
+def summarize_prices(posts: list[dict[str, Any]]) -> None:
+    """가격 분포 요약 통계 출력"""
+    by_cat: dict[str, list[int]] = {}
+    for p in posts:
+        by_cat.setdefault(p["category"], []).append(p["price"])
+
+    print("\n💰 가격 분포 요약:")
+    for cat, arr in by_cat.items():
+        if not arr:  # 빈 배열 처리
+            continue
+        arr.sort()
+        n = len(arr)
+        mid = arr[n // 2]
+        # 인덱스 안전성 강화: 클램프 적용
+        p10_idx = max(0, int(n * 0.1))
+        p90_idx = min(n - 1, int(n * 0.9))
+        p10 = arr[p10_idx]
+        p90 = arr[p90_idx]
+        print(f"   [{cat}] n={n} median={mid:,} p10={p10:,} p90={p90:,}")
 
 
 def generate_user_profiles(num_users: int = 1000) -> list[dict[str, Any]]:
     """사용자 프로필 생성 (현실적 분포 적용)"""
     profiles = []
 
-    # 페르소나 5명 고정 (회귀 테스트용)
+    # 페르소나 5명 고정 (회귀 테스트용) - 딥카피로 안전한 복사
     persona_profiles = []
     for persona in PERSONAS:
-        profile = persona.copy()
+        profile = copy.deepcopy(persona)
         profile["id"] = str(uuid.uuid4())
         profile["email"] = persona["email"]
         profile["nickname"] = persona["nickname"]
@@ -342,7 +422,9 @@ def generate_user_profiles(num_users: int = 1000) -> list[dict[str, Any]]:
         interested_categories = random.choices(
             categories, weights=category_weights, k=num_categories
         )
-        interested_categories = list(set(interested_categories))  # 중복 제거
+        interested_categories = unique_keep_order(
+            interested_categories
+        )  # 순서 보존 중복 제거
 
         # 위시 마켓: 대형 마트 중심 + 현실적 분포 (대형마트 60%, 기타 40%)
         market_weights = [
@@ -369,7 +451,7 @@ def generate_user_profiles(num_users: int = 1000) -> list[dict[str, Any]]:
         ]
         num_markets = random.choices([1, 2, 3], weights=[0.4, 0.4, 0.2])[0]
         wish_markets = random.choices(markets, weights=market_weights, k=num_markets)
-        wish_markets = list(set(wish_markets))
+        wish_markets = unique_keep_order(wish_markets)  # 순서 보존 중복 제거
 
         # 선호 시간대: 3-6개 시간대 선택, 평일 저녁(19-22)과 주말 오전/오후 비중 높게
         wish_times = [0] * 24
@@ -378,9 +460,9 @@ def generate_user_profiles(num_users: int = 1000) -> list[dict[str, Any]]:
         # 평일 저녁 시간대 (19-22) 높은 확률
         evening_slots = [19, 20, 21, 22]
         for slot in evening_slots:
-            if random.random() < EVENING_PROBABILITY:
+            if random.random() < EVENING_PROBABILITY and num_time_slots > 0:
                 wish_times[slot] = 1
-                num_time_slots -= 1
+                num_time_slots = max(0, num_time_slots - 1)
 
         # 주말 오전/오후 시간대 (9-12, 14-17) 중간 확률
         weekend_slots = [9, 10, 11, 12, 14, 15, 16, 17]
@@ -389,7 +471,7 @@ def generate_user_profiles(num_users: int = 1000) -> list[dict[str, Any]]:
                 break
             if random.random() < WEEKEND_PROBABILITY:
                 wish_times[slot] = 1
-                num_time_slots -= 1
+                num_time_slots = max(0, num_time_slots - 1)
 
         # 신고 횟수: 대부분 0, 1은 5% 미만, 2+는 극소수
         reported_count = random.choices([0, 1, 2, 3], weights=[0.92, 0.05, 0.02, 0.01])[
@@ -505,7 +587,7 @@ def generate_user_wish_spots(
     return wish_spots
 
 
-def generate_mogu_posts(  # noqa: PLR0912
+def generate_mogu_posts(  # noqa: PLR0912, PLR0915
     num_posts: int = 5000, user_profiles: list[dict[str, Any]] | None = None
 ) -> list[dict[str, Any]]:
     """모구 게시물 생성 (현실적 분포 적용)"""
@@ -543,18 +625,34 @@ def generate_mogu_posts(  # noqa: PLR0912
         ]
         mogu_market = random.choices(markets, weights=market_weights)[0]
 
-        # 카테고리별 합리적 가격 범위 (log1p 분포 활용)
-        if category == "식품/간식류":
-            base_price = random.randint(15000, 45000)
-        elif category == "생활용품":
-            base_price = random.randint(8000, 60000)
-        elif category in ["패션/잡화", "뷰티/헬스케어"]:
-            base_price = random.randint(10000, 70000)
-        else:
-            base_price = random.randint(10000, 50000)
+        # 마켓별 특성을 반영한 가격 범위 (MARKET_CHARACTERISTICS 활용)
+        market_info = MARKET_CHARACTERISTICS[mogu_market]
+        market_price_range: tuple[int, int] = tuple(market_info["price_range"])  # type: ignore
 
-        # log1p 분포로 가격 생성 (더 현실적)
-        price = int(base_price * (1 + random.lognormvariate(0, 0.3)))
+        # 카테고리별 가격 범위 조정 (마켓 범위와 카테고리 범위 교집합)
+        if category == "식품/간식류":
+            min_price = max(market_price_range[0], 15000)
+            max_price = min(market_price_range[1], 45000)
+        elif category == "생활용품":
+            min_price = max(market_price_range[0], 8000)
+            max_price = min(market_price_range[1], 60000)
+        elif category in ["패션/잡화", "뷰티/헬스케어"]:
+            min_price = max(market_price_range[0], 10000)
+            max_price = min(market_price_range[1], 70000)
+        else:
+            min_price = max(market_price_range[0], 10000)
+            max_price = min(market_price_range[1], 50000)
+
+        # 범위가 유효하지 않으면 마켓 범위 사용
+        if min_price >= max_price:
+            min_price = market_price_range[0]
+            max_price = market_price_range[1]
+
+        base_price = random.randint(min_price, max_price)
+
+        # log1p 분포로 가격 생성 (양/음 변동 허용)
+        multiplier = max(0.6, min(1.6, random.lognormvariate(0, 0.25)))
+        price = int(base_price * multiplier)
 
         # 수고비 설정 (0-20%, 기본 0-10%가 다수, 15%+는 소수)
         labor_fee_ranges = [
@@ -566,18 +664,42 @@ def generate_mogu_posts(  # noqa: PLR0912
         selected_range = random.choices(
             labor_fee_ranges, weights=[r[2] for r in labor_fee_ranges]
         )[0]
-        labor_fee = int(price * random.uniform(selected_range[0], selected_range[1]))
+        labor_fee = max(
+            100, int(price * random.uniform(selected_range[0], selected_range[1]))
+        )
 
-        # 목표 인원 설정 (3-8명, 식품/생활용 4-6 모드)
+        # 목표 인원 설정 (마켓의 bulk_tendency 반영)
+        is_bulk_market = bool(market_info["bulk_tendency"])  # 타입 캐스팅
+
         if category in ["식품/간식류", "생활용품"]:
+            if is_bulk_market:
+                # 대용량 마켓: 더 많은 인원 선호
+                target_count_options = [
+                    (4, 0.10),  # 4명, 10% 확률
+                    (5, 0.25),  # 5명, 25% 확률
+                    (6, 0.35),  # 6명, 35% 확률
+                    (7, 0.20),  # 7명, 20% 확률
+                    (8, 0.10),  # 8명, 10% 확률
+                ]
+            else:
+                # 일반 마켓: 기존 분포 유지
+                target_count_options = [
+                    (3, 0.10),  # 3명, 10% 확률
+                    (4, 0.30),  # 4명, 30% 확률
+                    (5, 0.35),  # 5명, 35% 확률
+                    (6, 0.20),  # 6명, 20% 확률
+                    (7, 0.05),  # 7명, 5% 확률
+                ]
+        elif is_bulk_market:
+            # 대용량 마켓이지만 패션/뷰티는 적당히
             target_count_options = [
-                (3, 0.10),  # 3명, 10% 확률
-                (4, 0.30),  # 4명, 30% 확률
-                (5, 0.35),  # 5명, 35% 확률
-                (6, 0.20),  # 6명, 20% 확률
-                (7, 0.05),  # 7명, 5% 확률
+                (3, 0.25),  # 3명, 25% 확률
+                (4, 0.35),  # 4명, 35% 확률
+                (5, 0.25),  # 5명, 25% 확률
+                (6, 0.15),  # 6명, 15% 확률
             ]
         else:
+            # 일반 마켓: 기존 분포 유지
             target_count_options = [
                 (2, 0.20),  # 2명, 20% 확률
                 (3, 0.30),  # 3명, 30% 확률
@@ -598,9 +720,19 @@ def generate_mogu_posts(  # noqa: PLR0912
         # 위치 생성 (마켓 주변 또는 주최자 위시스팟 주변 0.3-1.5km)
         location = generate_random_location()
 
-        # 모구 일시 생성 (오늘~+14일, 평일 저녁과 주말 오전/오후 비중 높게)
-        days_ahead = random.randint(0, 14)
-        base_datetime = datetime.now() + timedelta(days=days_ahead)
+        # 모구 일시 생성 (발표일 보장 로직 포함)
+        force_after_presentation = (
+            i % int(1 / CFG.recruiting_quota_ratio) == 0
+        )  # 20% 보장
+
+        if force_after_presentation:
+            # 발표일 이후 게시물 (recruiting 보장)
+            days_after_presentation = random.randint(0, 3)
+            base_datetime = PRESENTATION_DAY + timedelta(days=days_after_presentation)
+        else:
+            # 일반 게시물 (BASE_NOW~+14일)
+            days_ahead = random.randint(0, 14)
+            base_datetime = BASE_NOW + timedelta(days=days_ahead)
 
         # 시간대 분포: 평일 저녁(19-22) 40%, 주말 오전(9-12) 30%, 주말 오후(14-17) 30%
         # 야간 시간대도 포함 (0-1시, 23시) - 야간 근무자 고려
@@ -644,19 +776,24 @@ def generate_mogu_posts(  # noqa: PLR0912
             user_id = str(uuid.uuid4())
 
         # 추천 시스템용 상태 분포: recruiting 대폭 증가
-        status = random.choices(
-            ["recruiting", "locked", "purchasing", "distributing", "completed"],
-            weights=[0.85, 0.08, 0.04, 0.02, 0.01],  # recruiting 85%로 대폭 증가
-        )[0]
-
-        # joined_count는 시간 경과와 인기와 양의 상관
-        max_joined = target_count - 1 if status == "recruiting" else target_count
-        if status == "recruiting":
-            # recruiting 상태에서는 0~target-1
-            joined_count = random.randint(0, max_joined)
+        if force_after_presentation:
+            # 발표일 이후 게시물은 반드시 recruiting 상태
+            status = "recruiting"
+            joined_count = random.randint(0, target_count - 1)  # 목표 인원 미만
         else:
-            # 다른 상태에서는 target에 가까운 값
-            joined_count = random.randint(max(0, target_count - 2), target_count)
+            status = random.choices(
+                ["recruiting", "locked", "purchasing", "distributing", "completed"],
+                weights=[0.85, 0.08, 0.04, 0.02, 0.01],  # recruiting 85%로 대폭 증가
+            )[0]
+
+            # joined_count는 시간 경과와 인기와 양의 상관
+            max_joined = target_count - 1 if status == "recruiting" else target_count
+            if status == "recruiting":
+                # recruiting 상태에서는 0~target-1
+                joined_count = random.randint(0, max_joined)
+            else:
+                # 다른 상태에서는 target에 가까운 값
+                joined_count = random.randint(max(0, target_count - 2), target_count)
 
         post = {
             "id": str(uuid.uuid4()),
@@ -681,7 +818,7 @@ def generate_mogu_posts(  # noqa: PLR0912
 
 
 def calculate_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-    """두 좌표 간의 거리 계산 (km)"""
+    """두 좌표 간의 거리 계산 (km) - Haversine 공식 사용"""
     # Haversine 공식 사용
     R = 6371  # 지구 반지름 (km)
 
@@ -696,6 +833,32 @@ def calculate_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> fl
     return R * c
 
 
+def calculate_distance_cached(
+    lat1: float,
+    lon1: float,
+    lat2: float,
+    lon2: float,
+    cache: dict[tuple[tuple[float, float], ...], float],
+) -> float:
+    """캐싱을 사용한 거리 계산 (km) - 키 정규화 포함"""
+
+    # 좌표 정규화 (소수점 5자리로 반올림, ≈1m 정밀도)
+    def _quantize(x: float) -> float:
+        return round(x, CFG.cache_precision_digits)
+
+    # 캐시 키 생성 (정규화된 정렬된 좌표 쌍)
+    key = tuple(
+        sorted([(_quantize(lat1), _quantize(lon1)), (_quantize(lat2), _quantize(lon2))])
+    )
+
+    if key in cache:
+        return cache[key]
+
+    distance = calculate_distance(lat1, lon1, lat2, lon2)
+    cache[key] = distance
+    return distance
+
+
 def generate_user_interactions(  # noqa: PLR0912, PLR0915
     user_profiles: list[dict[str, Any]],
     mogu_posts: list[dict[str, Any]],
@@ -705,6 +868,12 @@ def generate_user_interactions(  # noqa: PLR0912, PLR0915
     favorites: list[dict[str, Any]] = []
     participations: list[dict[str, Any]] = []
     ratings: list[dict[str, Any]] = []
+
+    # 거리 계산 캐시 (성능 최적화)
+    distance_cache: dict[tuple[tuple[float, float], ...], float] = {}
+
+    # 참여자 수 O(1) 카운터 (성능 최적화)
+    participants_count: dict[str, int] = defaultdict(int)
 
     # 사용자별 위시스팟 매핑
     user_wish_spots: dict[str, list[dict[str, Any]]] = {}
@@ -735,12 +904,14 @@ def generate_user_interactions(  # noqa: PLR0912, PLR0915
             if post["mogu_market"] in user["wish_markets"]:
                 score += 0.6
 
-            # 3. 거리 계산 (가장 가까운 위시스팟 기준)
+            # 3. 거리 계산 (가장 가까운 위시스팟 기준, 캐시 사용)
             min_distance = float("inf")
             for spot in user_spots:
                 spot_lat, spot_lon = spot["location"]
                 post_lat, post_lon = post["mogu_spot"]
-                distance = calculate_distance(spot_lat, spot_lon, post_lat, post_lon)
+                distance = calculate_distance_cached(
+                    spot_lat, spot_lon, post_lat, post_lon, distance_cache
+                )
                 min_distance = min(min_distance, distance)
 
             # 거리별 점수 (exp(-d/α) 공식 사용, α=4.0km)
@@ -770,7 +941,7 @@ def generate_user_interactions(  # noqa: PLR0912, PLR0915
 
             # 6. 신선도 (등록 24시간 이내 +0.3)
             hours_since_creation = (
-                datetime.now() - post["created_at"]
+                BASE_NOW - post["created_at"]
             ).total_seconds() / 3600
             if hours_since_creation <= FRESHNESS_HOURS:
                 score += 0.3
@@ -845,19 +1016,86 @@ def generate_user_interactions(  # noqa: PLR0912, PLR0915
                         )
                     )
 
-        # 게시물별 선호도 점수 계산
+        # Top-K 후보 필터링 (성능 최적화)
+        # 1단계: 관심 카테고리/마켓 일치 후보
+        category_market_candidates = [
+            post
+            for post in mogu_posts
+            if post["status"] == "recruiting"
+            and post["category"] in user["interested_categories"]
+            and post["mogu_market"] in user["wish_markets"]
+        ]
+
+        # 2단계: 거리 기반 후보 (6km 이내)
+        def is_within_distance(post: dict[str, Any], max_distance: float = 6.0) -> bool:
+            """게시물이 사용자 위시스팟으로부터 지정된 거리 이내인지 확인"""
+            post_lat, post_lon = post["mogu_spot"]
+            min_distance = float("inf")
+            for spot in user_spots:
+                spot_lat, spot_lon = spot["location"]
+                distance = calculate_distance_cached(
+                    spot_lat, spot_lon, post_lat, post_lon, distance_cache
+                )
+                min_distance = min(min_distance, distance)
+            return min_distance <= max_distance
+
+        distance_candidates = [
+            post
+            for post in mogu_posts
+            if post["status"] == "recruiting" and is_within_distance(post, 6.0)
+        ]
+
+        # 3단계: 후보군 통합 및 중복 제거 (ID 기반)
+        all_candidates = category_market_candidates + distance_candidates
+        seen_ids = set()
+        unique_candidates = []
+        for candidate in all_candidates:
+            if candidate["id"] not in seen_ids:
+                seen_ids.add(candidate["id"])
+                unique_candidates.append(candidate)
+        all_candidates = unique_candidates
+
+        # 4단계: 후보가 너무 적으면 추가 보완 (로깅 포함)
+        if len(all_candidates) < MIN_CANDIDATES_THRESHOLD:
+            logging.info(
+                "Candidate shortage for user %s: %d < %d; adding time-matched posts",
+                user["id"],
+                len(all_candidates),
+                MIN_CANDIDATES_THRESHOLD,
+            )
+            # 시간대 일치 후보 추가
+            time_candidates = [
+                post
+                for post in mogu_posts
+                if post["status"] == "recruiting"
+                and user["wish_times"][post["mogu_datetime"].hour] == 1
+            ]
+            # 시간대 후보도 ID 기반으로 중복 제거
+            for candidate in time_candidates:
+                if candidate["id"] not in seen_ids:
+                    seen_ids.add(candidate["id"])
+                    all_candidates.append(candidate)
+
+        # 5단계: 최대 K개 후보로 제한 (성능 최적화)
+        final_candidates = (
+            random.sample(
+                all_candidates, min(CFG.max_candidates_k, len(all_candidates))
+            )
+            if len(all_candidates) > CFG.max_candidates_k
+            else all_candidates
+        )
+
+        # 게시물별 선호도 점수 계산 (Top-K 후보만)
         post_scores = []
-        for post in mogu_posts:
-            if post["status"] != "recruiting":
-                continue
+        for post in final_candidates:
             score = calculate_preference_score(post)
             post_scores.append((post, score))
 
-        # 점수 순으로 정렬
-        post_scores.sort(key=lambda x: x[1], reverse=True)
+        # heapq.nlargest로 상위 N개만 선택 (정렬 최적화)
+        top_n = min(base_interactions, len(post_scores))
+        top_scores = heapq.nlargest(top_n, post_scores, key=lambda x: x[1])
 
-        # 상위 게시물들에 대해 상호작용 생성
-        num_interactions = min(base_interactions, len(post_scores))
+        num_interactions = len(top_scores)
 
         # 페르소나별 최소 참여 수 보장
         min_interactions = 0
@@ -875,7 +1113,7 @@ def generate_user_interactions(  # noqa: PLR0912, PLR0915
         num_interactions = max(num_interactions, min_interactions)
 
         for i in range(num_interactions):
-            post, score = post_scores[i]
+            post, score = top_scores[i]
 
             # 페르소나 기반 가중치 적용
             weight = 1.0
@@ -940,7 +1178,7 @@ def generate_user_interactions(  # noqa: PLR0912, PLR0915
                     weight *= 0.8  # 남성 0.8배
 
             # 연령대 기반 가중치 (birth_date로 계산)
-            current_year = datetime.now().year
+            current_year = BASE_NOW.year
             age = current_year - user["birth_date"].year
 
             if post["category"] == "패션/잡화":
@@ -973,6 +1211,9 @@ def generate_user_interactions(  # noqa: PLR0912, PLR0915
                     weight *= 1.3  # 3인 가구 1.3배
                 elif user["household_size"] == "4인 이상":
                     weight *= 1.8  # 4인 이상 가구 1.8배
+
+            # 가중치 포화 방지 (클립)
+            weight = min(weight, 10.0)
 
             # 로지스틱 스코어를 확률로 변환 (가중치 적용)
             probability = 1 / (1 + math.exp(-score * weight))
@@ -1011,6 +1252,9 @@ def generate_user_interactions(  # noqa: PLR0912, PLR0915
                     # 다른 시간대 (현실적인 변동성)
                     interaction_time = generate_realistic_datetime(90)
 
+                # 게시물 생성 이후로 클램프
+                interaction_time = clamp_after(interaction_time, post["created_at"])
+
                 favorite = {
                     "user_id": user["id"],
                     "mogu_post_id": post["id"],
@@ -1036,16 +1280,14 @@ def generate_user_interactions(  # noqa: PLR0912, PLR0915
             # 추천 시스템용 참여 확률 대폭 증가
             participation_prob = min(probability * 0.4 * participation_multiplier, 0.30)
 
-            # 모구 인원 체킹: 자리가 있을 때만 참여 가능
-            # 현재 해당 게시물의 참여자 수 확인
-            current_participants = len(
-                [
-                    p
-                    for p in participations
-                    if p["mogu_post_id"] == post["id"]
-                    and p["status"] in ["applied", "accepted", "fulfilled"]
-                ]
-            )
+            # 모구 인원 체킹: 자리가 있을 때만 참여 가능 (O(1) 카운터 사용)
+            current_participants = participants_count[post["id"]]
+
+            # 발표일 이후 일정은 항상 한 자리 남기기 (데모용 recruiting 보장)
+            if post["mogu_datetime"] >= PRESENTATION_DAY and current_participants >= (
+                post["target_count"] - 1
+            ):
+                continue
 
             # 목표 인원에 도달했으면 참여 불가
             if current_participants >= post["target_count"]:
@@ -1076,19 +1318,34 @@ def generate_user_interactions(  # noqa: PLR0912, PLR0915
                     # 다른 시간대 (현실적인 변동성)
                     applied_time = generate_realistic_datetime(90)
 
+                # 게시물 생성 이후로 클램프
+                applied_time = clamp_after(applied_time, post["created_at"])
+
+                # 시간 순서 보장: applied_at → decided_at
+                decided_time = None
+                if status != "applied":
+                    # 5분~48시간 후에 결정
+                    decided_time = after_time(applied_time, 5, 48 * 60)
+
                 participation = {
                     "user_id": user["id"],
                     "mogu_post_id": post["id"],
                     "status": status,
                     "applied_at": applied_time,
-                    "decided_at": (
-                        generate_realistic_datetime(90) if status != "applied" else None
-                    ),
+                    "decided_at": decided_time,
                 }
                 participations.append(participation)
 
-                # fulfilled인 경우 평가 생성
-                if status == "fulfilled" and random.random() < RATING_PROBABILITY:
+                # 참여자 수 카운터 업데이트 (O(1))
+                if status in {"applied", "accepted", "fulfilled"}:
+                    participants_count[post["id"]] += 1
+
+                # fulfilled인 경우 평가 생성 (자기자신 리뷰 방지)
+                if (
+                    status == "fulfilled"
+                    and random.random() < RATING_PROBABILITY
+                    and user["id"] != post["user_id"]  # 자기자신 리뷰 방지
+                ):
                     # 별점 분포: 평균 4.2±0.6 (정규분포 절단)
                     rating_score = random.gauss(4.2, 0.6)
                     rating_score = max(1, min(5, int(round(rating_score))))
@@ -1126,6 +1383,17 @@ def generate_user_interactions(  # noqa: PLR0912, PLR0915
                             positive_keywords + negative_keywords, random.randint(1, 2)
                         )
 
+                    # 시간 순서 보장: max(decided_at, mogu_datetime) → rating_at
+                    rating_base_time = max(
+                        decided_time or applied_time, post["mogu_datetime"]
+                    )
+                    rating_time = after_time(
+                        rating_base_time, 10, 24 * 60
+                    )  # 10분~24시간 후
+
+                    # 게시물 생성 이후로 클램프
+                    rating_time = clamp_after(rating_time, post["created_at"])
+
                     rating = {
                         "id": str(uuid.uuid4()),
                         "mogu_post_id": post["id"],
@@ -1133,12 +1401,12 @@ def generate_user_interactions(  # noqa: PLR0912, PLR0915
                         "reviewee_id": post["user_id"],
                         "stars": rating_score,
                         "keywords": keywords,
-                        "created_at": generate_realistic_datetime(90),
+                        "created_at": rating_time,
                     }
                     ratings.append(rating)
 
-    # 참여 생성 후 joined_count 업데이트
-    print("🔄 joined_count 업데이트 중...")
+    # 참여 생성 후 joined_count 및 상태 업데이트 (상태 머신 로직)
+    print("🔄 joined_count 및 상태 업데이트 중...")
     for post in mogu_posts:
         # 해당 게시물의 실제 참여자 수 계산
         actual_participants = len(
@@ -1153,7 +1421,7 @@ def generate_user_interactions(  # noqa: PLR0912, PLR0915
         # joined_count를 실제 참여자 수로 업데이트
         post["joined_count"] = actual_participants
 
-        # 상태도 업데이트 (비즈니스 로직 반영)
+        # fulfilled 참여자 수 계산
         fulfilled_participants = len(
             [
                 p
@@ -1162,15 +1430,25 @@ def generate_user_interactions(  # noqa: PLR0912, PLR0915
             ]
         )
 
-        if fulfilled_participants > 0:
-            # fulfilled 참여자가 있으면 반드시 completed 상태
+        # 상태 머신 로직 (발표일 보장 포함)
+        if post["mogu_datetime"] >= PRESENTATION_DAY:
+            # 발표일 이후 게시물은 recruiting 상태 유지
+            post["status"] = "recruiting"
+        elif fulfilled_participants > 0:
+            # fulfilled 참여자가 있으면 completed 상태
             post["status"] = "completed"
         elif (
-            post["status"] == "recruiting"
-            and actual_participants >= post["target_count"]
+            fulfilled_participants == 0 and actual_participants >= post["target_count"]
         ):
-            # 목표 인원에 도달했으면 locked로 변경
+            # 목표 인원 도달했지만 fulfilled 없으면 locked 상태
             post["status"] = "locked"
+        elif (
+            post["status"] == "recruiting"
+            and actual_participants < post["target_count"]
+        ):
+            # 여전히 모집 중
+            post["status"] = "recruiting"
+        # 다른 상태들은 그대로 유지
 
     return favorites, participations, ratings
 
@@ -1190,9 +1468,10 @@ def generate_comments(
                 post_participants[post_id] = []
             post_participants[post_id].append(participation["user_id"])
 
-    # 각 게시물별로 댓글 생성
+    # 각 게시물별로 댓글 생성 (상태 업데이트 전 스냅샷 기준)
     for post in mogu_posts:
-        if post["status"] != "recruiting":
+        # recruiting 또는 locked 상태에서 댓글 허용 (모집 중이거나 모집 완료된 상태)
+        if post["status"] not in ["recruiting", "locked"]:
             continue
 
         participants = post_participants.get(post["id"], [])
@@ -1215,16 +1494,37 @@ def generate_comments(
             "혹시 취소 가능한가요?",
         ]
 
+        # 댓글 중복/스팸 완화를 위한 캐시
+        used_comments = set()
+
         for i in range(num_comments):
-            commenter = random.choice(participants)
-            content = random.choice(comment_templates)
+            # 중복 방지: 최대 5번 시도
+            for attempt in range(5):
+                commenter = random.choice(participants)
+                content = random.choice(comment_templates)
+                comment_key = (commenter, content)
+
+                if comment_key not in used_comments:
+                    used_comments.add(comment_key)
+                    break
+            else:
+                # 5번 시도 후에도 중복이면 그냥 진행 (극히 드문 경우)
+                commenter = random.choice(participants)
+                content = random.choice(comment_templates)
+
+            # 댓글 시간: 게시물 생성 후 ~ 모구 일시 전까지
+            comment_time = generate_realistic_datetime(90)
+            comment_time = clamp_after(comment_time, post["created_at"])
+            if comment_time > post["mogu_datetime"]:
+                # 모구 일시보다 늦으면 모구 일시 1시간 전으로 조정
+                comment_time = post["mogu_datetime"] - timedelta(hours=1)
 
             comment = {
                 "id": str(uuid.uuid4()),
                 "mogu_post_id": post["id"],
                 "user_id": commenter,
                 "content": content,
-                "created_at": generate_realistic_datetime(90),
+                "created_at": comment_time,
             }
             comments.append(comment)
 
@@ -1233,6 +1533,9 @@ def generate_comments(
 
 async def main(seed: int = 42) -> None:
     """메인 실행 함수"""
+    # 로깅 설정
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+
     # 재현 가능성을 위한 seed 설정
     random.seed(seed)
     print(f"🚀 모구 AI 추천 시스템 더미 데이터 생성 시작... (seed: {seed})")
@@ -1266,7 +1569,22 @@ async def main(seed: int = 42) -> None:
     comments = generate_comments(mogu_posts, participations)
     print(f"✅ {len(comments)}개의 댓글 생성 완료")
 
-    # 6. 데이터 저장
+    # 6. 가격 분포 통계 출력
+    summarize_prices(mogu_posts)
+
+    # 7. 발표일 이후 규칙 검증 (어서션)
+    print("🔍 발표일 이후 규칙 검증 중...")
+    for post in mogu_posts:
+        if post["mogu_datetime"] >= PRESENTATION_DAY:
+            assert post["joined_count"] <= post["target_count"] - 1, (
+                f"Post {post['id']} overfilled after presentation day"
+            )
+            assert post["status"] == "recruiting", (
+                f"Post {post['id']} not recruiting after presentation day"
+            )
+    print("✅ 발표일 이후 규칙 검증 완료")
+
+    # 8. 데이터 저장
     print("💾 데이터 저장 중...")
     dummy_data: dict[str, Any] = {
         "users": user_profiles,
@@ -1276,7 +1594,7 @@ async def main(seed: int = 42) -> None:
         "participations": participations,
         "ratings": ratings,
         "comments": comments,
-        "generated_at": datetime.now().isoformat(),
+        "generated_at": BASE_NOW.isoformat(),
         "statistics": {
             "total_users": len(user_profiles),
             "total_wish_spots": len(wish_spots),
@@ -1304,12 +1622,19 @@ async def main(seed: int = 42) -> None:
         },
     }
 
-    # JSON 파일로 저장
-    with open("dummy_data.json", "w", encoding="utf-8") as f:
-        json.dump(dummy_data, f, ensure_ascii=False, indent=2, default=str)
+    # JSON 파일로 저장 (gzip 압축)
+    with gzip.open("dummy_data.json.gz", "wt", encoding="utf-8") as f:
+        json.dump(
+            dummy_data,
+            f,
+            ensure_ascii=False,
+            indent=None,
+            separators=(",", ":"),
+            default=str,
+        )
 
     print("🎉 더미 데이터 생성 완료!")
-    print("📁 파일 저장: dummy_data.json")
+    print("📁 파일 저장: dummy_data.json.gz")
     print("📊 통계:")
     print(f"   - 사용자: {dummy_data['statistics']['total_users']}명")
     print(f"   - 위시스팟: {dummy_data['statistics']['total_wish_spots']}개")
