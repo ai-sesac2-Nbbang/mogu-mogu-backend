@@ -3,7 +3,9 @@
 더미 데이터를 데이터베이스에 삽입하는 스크립트
 """
 
+import argparse
 import asyncio
+import gzip
 import json
 import sys
 from datetime import date, datetime
@@ -13,7 +15,7 @@ from typing import Any
 # 프로젝트 루트를 Python 경로에 추가
 sys.path.append(str(Path(__file__).parent.parent))
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database_session import get_async_session
@@ -35,6 +37,81 @@ from app.models import (
     User,
     UserWishSpot,
 )
+
+
+async def delete_existing_dummy_data(session: AsyncSession) -> None:
+    """기존 더미 데이터 삭제 (외래키 제약조건 고려)"""
+    print("🗑️  기존 더미 데이터 삭제 중...")
+
+    # 외래키 제약조건을 고려한 삭제 순서
+    # 1. 평가 데이터 삭제
+    rating_delete_result = await session.execute(
+        delete(Rating).where(
+            Rating.reviewer_id.in_(
+                select(User.id).where(User.email.like("%@mogumogu.dev"))
+            )
+        )
+    )
+    print(f"   - 평가 데이터 삭제: {rating_delete_result.rowcount}개")
+
+    # 2. 댓글 데이터 삭제
+    comment_delete_result = await session.execute(
+        delete(MoguComment).where(
+            MoguComment.user_id.in_(
+                select(User.id).where(User.email.like("%@mogumogu.dev"))
+            )
+        )
+    )
+    print(f"   - 댓글 데이터 삭제: {comment_delete_result.rowcount}개")
+
+    # 3. 참여 데이터 삭제
+    participation_delete_result = await session.execute(
+        delete(Participation).where(
+            Participation.user_id.in_(
+                select(User.id).where(User.email.like("%@mogumogu.dev"))
+            )
+        )
+    )
+    print(f"   - 참여 데이터 삭제: {participation_delete_result.rowcount}개")
+
+    # 4. 찜하기 데이터 삭제
+    favorite_delete_result = await session.execute(
+        delete(MoguFavorite).where(
+            MoguFavorite.user_id.in_(
+                select(User.id).where(User.email.like("%@mogumogu.dev"))
+            )
+        )
+    )
+    print(f"   - 찜하기 데이터 삭제: {favorite_delete_result.rowcount}개")
+
+    # 5. 모구 게시물 데이터 삭제
+    post_delete_result = await session.execute(
+        delete(MoguPost).where(
+            MoguPost.user_id.in_(
+                select(User.id).where(User.email.like("%@mogumogu.dev"))
+            )
+        )
+    )
+    print(f"   - 모구 게시물 삭제: {post_delete_result.rowcount}개")
+
+    # 6. 위시스팟 데이터 삭제
+    wish_spot_delete_result = await session.execute(
+        delete(UserWishSpot).where(
+            UserWishSpot.user_id.in_(
+                select(User.id).where(User.email.like("%@mogumogu.dev"))
+            )
+        )
+    )
+    print(f"   - 위시스팟 삭제: {wish_spot_delete_result.rowcount}개")
+
+    # 7. 사용자 데이터 삭제
+    user_delete_result = await session.execute(
+        delete(User).where(User.email.like("%@mogumogu.dev"))
+    )
+    print(f"   - 사용자 삭제: {user_delete_result.rowcount}개")
+
+    await session.commit()
+    print("✅ 기존 더미 데이터 삭제 완료")
 
 
 async def insert_users(session: AsyncSession, users_data: list[dict[str, Any]]) -> None:
@@ -317,22 +394,39 @@ async def insert_ratings(
     print(f"✅ {len(ratings_data)}개의 평가 삽입 완료")
 
 
-async def main() -> None:
+async def main(
+    delete_existing: bool = True, data_file: str = "dummy_data.json.gz"
+) -> None:
     """메인 실행 함수"""
     print("🚀 더미 데이터 데이터베이스 삽입 시작...")
 
-    # 더미 데이터 로드
+    if delete_existing:
+        print("⚠️  기존 더미 데이터를 삭제합니다.")
+
+    # 더미 데이터 로드 (gzip 지원)
     try:
-        with open("dummy_data.json", encoding="utf-8") as f:
-            dummy_data = json.load(f)
+        if data_file.endswith(".gz"):
+            with gzip.open(data_file, "rt", encoding="utf-8") as f:
+                dummy_data = json.load(f)
+        else:
+            with open(data_file, encoding="utf-8") as f:
+                dummy_data = json.load(f)
+        print(f"📁 데이터 파일 로드 완료: {data_file}")
     except FileNotFoundError:
-        print("❌ dummy_data.json 파일을 찾을 수 없습니다.")
+        print(f"❌ {data_file} 파일을 찾을 수 없습니다.")
         print("먼저 generate_dummy_data.py를 실행해주세요.")
+        return
+    except Exception as e:
+        print(f"❌ 데이터 파일 로드 중 오류 발생: {e}")
         return
 
     # 데이터베이스 세션 생성
     async with get_async_session() as session:
         try:
+            # 0. 기존 더미 데이터 삭제 (옵션)
+            if delete_existing:
+                await delete_existing_dummy_data(session)
+
             # 1. 사용자 데이터 삽입
             await insert_users(session, dummy_data["users"])
 
@@ -363,4 +457,28 @@ async def main() -> None:
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    parser = argparse.ArgumentParser(
+        description="더미 데이터를 데이터베이스에 삽입합니다."
+    )
+    parser.add_argument(
+        "--no-delete",
+        action="store_true",
+        help="기존 더미 데이터를 삭제하지 않고 추가만 합니다 (기본값: 삭제 후 삽입)",
+    )
+    parser.add_argument(
+        "--data-file",
+        default="dummy_data.json.gz",
+        help="삽입할 더미 데이터 파일 경로 (기본값: dummy_data.json.gz)",
+    )
+
+    args = parser.parse_args()
+
+    # 기본값: 삭제 후 삽입 (delete_existing=True)
+    delete_existing = not args.no_delete
+
+    print("📋 실행 옵션:")
+    print(f"   - 기존 데이터 삭제: {'예' if delete_existing else '아니오'}")
+    print(f"   - 데이터 파일: {args.data_file}")
+    print()
+
+    asyncio.run(main(delete_existing=delete_existing, data_file=args.data_file))
