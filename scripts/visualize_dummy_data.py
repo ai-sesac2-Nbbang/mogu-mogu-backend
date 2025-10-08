@@ -838,6 +838,482 @@ def chart_joined_vs_status(posts: pd.DataFrame) -> None:
     savefig(os.path.join(OUT_DIR, "15_joined_by_status_box.png"))
 
 
+def chart_household_category_preference(
+    users: pd.DataFrame, favs: pd.DataFrame, posts: pd.DataFrame
+) -> None:
+    """가구원 수별 선호 카테고리 분석"""
+    # 사용자-찜하기-게시물 조인
+    user_favs = favs.merge(
+        users[["id", "household_size"]], left_on="user_id", right_on="id", how="left"
+    )
+    user_fav_posts = user_favs.merge(
+        posts[["id", "category"]], left_on="mogu_post_id", right_on="id", how="left"
+    )
+
+    # 가구원 수별 카테고리 집계
+    pivot = (
+        pd.crosstab(
+            user_fav_posts["household_size"],
+            user_fav_posts["category"],
+            normalize="index",
+        )
+        * 100
+    )
+
+    # 부드러운 색상 설정
+    soft_colors = ["#FF6B6B", "#4ECDC4", "#45B7D1", "#96CEB4"]
+
+    fig, ax = plt.subplots(figsize=(12, 8))
+    pivot.plot(
+        kind="bar",
+        ax=ax,
+        color=soft_colors,
+        alpha=0.8,
+        edgecolor="#2C3E50",
+        linewidth=1,
+    )
+
+    plt.title(
+        "가구원 수별 선호 카테고리 분석",
+        fontsize=16,
+        fontweight="bold",
+        color="#2C3E50",
+        pad=20,
+    )
+    plt.xlabel("가구원 수", fontsize=12, color="#2C3E50")
+    plt.ylabel("선호도 (%)", fontsize=12, color="#2C3E50")
+    plt.xticks(rotation=0)
+    plt.legend(title="카테고리", bbox_to_anchor=(1.05, 1), loc="upper left")
+    plt.grid(True, alpha=0.3, axis="y")
+
+    # 배경 설정
+    ax.set_facecolor("white")
+    fig.patch.set_facecolor("white")
+
+    savefig(os.path.join(OUT_DIR, "16_household_category_preference.png"))
+
+
+def chart_price_participation_analysis(
+    posts: pd.DataFrame, parts: pd.DataFrame
+) -> None:
+    """금액별 참여도 분석"""
+    # 게시물별 참여 수 계산
+    participation_counts = (
+        parts.groupby("mogu_post_id").size().reset_index(name="participation_count")
+    )
+
+    # 게시물 가격과 참여 수 조인
+    price_participation = posts[["id", "price"]].merge(
+        participation_counts, left_on="id", right_on="mogu_post_id", how="left"
+    )
+    price_participation["participation_count"] = price_participation[
+        "participation_count"
+    ].fillna(0)
+
+    # 가격 구간별로 그룹화 (10,000원 단위)
+    price_participation["price_range"] = (price_participation["price"] // 10000) * 10000
+    price_grouped = price_participation.groupby("price_range")[
+        "participation_count"
+    ].mean()
+
+    # 상위 15개 가격 구간만 표시
+    price_grouped = price_grouped.sort_values(ascending=False).head(15)
+
+    # 부드러운 색상 설정
+    soft_colors = ["#FF6B6B", "#4ECDC4", "#45B7D1", "#96CEB4", "#FFEAA7"]
+    colors = (soft_colors * ((len(price_grouped) // len(soft_colors)) + 1))[
+        : len(price_grouped)
+    ]
+
+    fig, ax = plt.subplots(figsize=(14, 8))
+    bars = ax.bar(
+        range(len(price_grouped)),
+        price_grouped.values,
+        color=colors,
+        alpha=0.8,
+        edgecolor="#2C3E50",
+        linewidth=1,
+    )
+
+    # 막대 위에 값 표시
+    for bar, value in zip(bars, price_grouped.values):
+        height = bar.get_height()
+        ax.text(
+            bar.get_x() + bar.get_width() / 2.0,
+            height + height * 0.01,
+            f"{value:.1f}",
+            ha="center",
+            va="bottom",
+            fontweight="bold",
+            color="#2C3E50",
+        )
+
+    plt.title(
+        "금액별 평균 참여도 분석 (Top 15)",
+        fontsize=16,
+        fontweight="bold",
+        color="#2C3E50",
+        pad=20,
+    )
+    plt.xlabel("가격 구간 (원)", fontsize=12, color="#2C3E50")
+    plt.ylabel("평균 참여 수", fontsize=12, color="#2C3E50")
+
+    # x축 레이블 설정
+    price_labels = [f"{int(p):,}" for p in price_grouped.index]
+    plt.xticks(range(len(price_grouped)), price_labels, rotation=45, ha="right")
+    plt.grid(True, alpha=0.3, axis="y")
+
+    # 배경 설정
+    ax.set_facecolor("white")
+    fig.patch.set_facecolor("white")
+
+    savefig(os.path.join(OUT_DIR, "17_price_participation_analysis.png"))
+
+
+def chart_gender_category_preference(
+    users: pd.DataFrame, favs: pd.DataFrame, posts: pd.DataFrame
+) -> None:
+    """남녀 선호 품목 (카테고리) 분석"""
+    # 사용자-찜하기-게시물 조인
+    user_favs = favs.merge(
+        users[["id", "gender"]], left_on="user_id", right_on="id", how="left"
+    )
+    user_fav_posts = user_favs.merge(
+        posts[["id", "category"]], left_on="mogu_post_id", right_on="id", how="left"
+    )
+
+    # 성별 카테고리 집계
+    pivot = (
+        pd.crosstab(
+            user_fav_posts["gender"], user_fav_posts["category"], normalize="index"
+        )
+        * 100
+    )
+
+    # 부드러운 색상 설정
+    soft_colors = ["#FF6B6B", "#4ECDC4", "#45B7D1", "#96CEB4"]
+
+    fig, ax = plt.subplots(figsize=(12, 8))
+    pivot.T.plot(
+        kind="bar",
+        ax=ax,
+        color=soft_colors[:2],
+        alpha=0.8,
+        edgecolor="#2C3E50",
+        linewidth=1,
+    )
+
+    plt.title(
+        "남녀 선호 카테고리 분석",
+        fontsize=16,
+        fontweight="bold",
+        color="#2C3E50",
+        pad=20,
+    )
+    plt.xlabel("카테고리", fontsize=12, color="#2C3E50")
+    plt.ylabel("선호도 (%)", fontsize=12, color="#2C3E50")
+    plt.xticks(rotation=30, ha="right")
+    # pivot.T로 전치했으므로 범례 순서는 female, male
+    plt.legend(title="성별", labels=["여성", "남성"])
+    plt.grid(True, alpha=0.3, axis="y")
+
+    # 배경 설정
+    ax.set_facecolor("white")
+    fig.patch.set_facecolor("white")
+
+    savefig(os.path.join(OUT_DIR, "18_gender_category_preference.png"))
+
+
+def chart_age_category_preference(
+    users: pd.DataFrame, favs: pd.DataFrame, posts: pd.DataFrame
+) -> None:
+    """연령대별 관심 카테고리 분석"""
+    # 연령대 계산 (birth_date 기준)
+    users_copy = users.copy()
+    users_copy["birth_date"] = pd.to_datetime(users_copy["birth_date"], errors="coerce")
+    current_year = 2025
+    users_copy["age"] = current_year - users_copy["birth_date"].dt.year
+
+    # 연령대 구간 설정 (10세 단위)
+    users_copy["age_group"] = pd.cut(
+        users_copy["age"],
+        bins=[0, 20, 30, 40, 50, 100],
+        labels=["10대", "20대", "30대", "40대", "50대+"],
+    )
+
+    # 사용자-찜하기-게시물 조인
+    user_favs = favs.merge(
+        users_copy[["id", "age_group"]], left_on="user_id", right_on="id", how="left"
+    )
+    user_fav_posts = user_favs.merge(
+        posts[["id", "category"]], left_on="mogu_post_id", right_on="id", how="left"
+    )
+
+    # 연령대별 카테고리 집계
+    pivot = (
+        pd.crosstab(
+            user_fav_posts["age_group"], user_fav_posts["category"], normalize="index"
+        )
+        * 100
+    )
+
+    # 부드러운 색상 설정
+    soft_colors = ["#FF6B6B", "#4ECDC4", "#45B7D1", "#96CEB4"]
+
+    fig, ax = plt.subplots(figsize=(12, 8))
+    pivot.plot(
+        kind="bar",
+        ax=ax,
+        color=soft_colors,
+        alpha=0.8,
+        edgecolor="#2C3E50",
+        linewidth=1,
+    )
+
+    plt.title(
+        "연령대별 관심 카테고리 분석",
+        fontsize=16,
+        fontweight="bold",
+        color="#2C3E50",
+        pad=20,
+    )
+    plt.xlabel("연령대", fontsize=12, color="#2C3E50")
+    plt.ylabel("선호도 (%)", fontsize=12, color="#2C3E50")
+    plt.xticks(rotation=0)
+    plt.legend(title="카테고리", bbox_to_anchor=(1.05, 1), loc="upper left")
+    plt.grid(True, alpha=0.3, axis="y")
+
+    # 배경 설정
+    ax.set_facecolor("white")
+    fig.patch.set_facecolor("white")
+
+    savefig(os.path.join(OUT_DIR, "19_age_category_preference.png"))
+
+
+def chart_target_count_success_rate(posts: pd.DataFrame, parts: pd.DataFrame) -> None:
+    """인원별 공동구매 성공률 분석"""
+    # 게시물별 참여 수 계산
+    participation_counts = (
+        parts[parts["status"] == "fulfilled"]
+        .groupby("mogu_post_id")
+        .size()
+        .reset_index(name="fulfilled_count")
+    )
+
+    # 게시물과 조인
+    post_success = posts[["id", "target_count", "status"]].merge(
+        participation_counts, left_on="id", right_on="mogu_post_id", how="left"
+    )
+    post_success["fulfilled_count"] = post_success["fulfilled_count"].fillna(0)
+
+    # 성공 여부 판단 (fulfilled_count > 0 또는 status == "completed")
+    post_success["is_success"] = (post_success["fulfilled_count"] > 0) | (
+        post_success["status"] == "completed"
+    )
+
+    # 목표 인원별 성공률 계산
+    success_rate = (
+        post_success.groupby("target_count")["is_success"].mean() * 100
+    ).sort_index()
+
+    # 부드러운 색상 설정
+    soft_colors = ["#FF6B6B", "#4ECDC4", "#45B7D1", "#96CEB4", "#FFEAA7", "#DDA0DD"]
+    colors = (soft_colors * ((len(success_rate) // len(soft_colors)) + 1))[
+        : len(success_rate)
+    ]
+
+    fig, ax = plt.subplots(figsize=(12, 8))
+    bars = ax.bar(
+        range(len(success_rate)),
+        success_rate.values,
+        color=colors,
+        alpha=0.8,
+        edgecolor="#2C3E50",
+        linewidth=1,
+    )
+
+    # 막대 위에 값 표시
+    for bar, value in zip(bars, success_rate.values):
+        height = bar.get_height()
+        ax.text(
+            bar.get_x() + bar.get_width() / 2.0,
+            height + height * 0.01,
+            f"{value:.1f}%",
+            ha="center",
+            va="bottom",
+            fontweight="bold",
+            color="#2C3E50",
+        )
+
+    plt.title(
+        "목표 인원별 공동구매 성공률",
+        fontsize=16,
+        fontweight="bold",
+        color="#2C3E50",
+        pad=20,
+    )
+    plt.xlabel("목표 인원", fontsize=12, color="#2C3E50")
+    plt.ylabel("성공률 (%)", fontsize=12, color="#2C3E50")
+    plt.xticks(range(len(success_rate)), success_rate.index)
+    plt.grid(True, alpha=0.3, axis="y")
+
+    # 배경 설정
+    ax.set_facecolor("white")
+    fig.patch.set_facecolor("white")
+
+    savefig(os.path.join(OUT_DIR, "20_target_count_success_rate.png"))
+
+
+def chart_category_popularity_pie(posts: pd.DataFrame) -> None:
+    """전체 카테고리 인기도 분석 (Pie Chart)"""
+    category_counts = posts["category"].value_counts()
+
+    # 부드러운 색상 팔레트
+    soft_colors = ["#FF6B6B", "#4ECDC4", "#45B7D1", "#96CEB4"]
+
+    fig, ax = plt.subplots(figsize=(12, 10))
+
+    wedges, texts, autotexts = ax.pie(
+        category_counts.values,
+        labels=category_counts.index,
+        autopct=lambda pct: f"{pct:.1f}%",
+        startangle=90,
+        pctdistance=0.75,
+        labeldistance=1.15,
+        textprops={"fontsize": 13, "weight": "bold", "color": "#2C3E50"},
+        colors=soft_colors,
+        shadow=False,
+        wedgeprops={"linewidth": 2, "edgecolor": "white"},
+    )
+
+    # autopct 텍스트 스타일 조정
+    for autotext in autotexts:
+        autotext.set_color("#2C3E50")
+        autotext.set_fontsize(12)
+        autotext.set_weight("bold")
+        autotext.set_bbox(dict(boxstyle="round,pad=0.3", facecolor="white", alpha=0.8))
+
+    # 라벨 텍스트 스타일 조정
+    for text in texts:
+        text.set_fontsize(13)
+        text.set_weight("bold")
+        text.set_color("#2C3E50")
+
+    plt.title(
+        "전체 카테고리 인기도 분석",
+        fontsize=18,
+        fontweight="bold",
+        color="#2C3E50",
+        pad=25,
+    )
+
+    # 범례 추가
+    legend_labels = [
+        f"{label}: {value}개 ({value / category_counts.sum() * 100:.1f}%)"
+        for label, value in category_counts.items()
+    ]
+    ax.legend(
+        wedges,
+        legend_labels,
+        loc="center left",
+        bbox_to_anchor=(1, 0.1, 0.5, 0.8),
+        fontsize=11,
+        frameon=True,
+        fancybox=True,
+        shadow=False,
+        framealpha=0.9,
+    )
+
+    # 배경 설정
+    ax.set_facecolor("white")
+    fig.patch.set_facecolor("white")
+
+    savefig(os.path.join(OUT_DIR, "21_category_popularity_pie.png"))
+
+
+def chart_time_activity_heatmap(parts: pd.DataFrame) -> None:
+    """참여 시간 활성도 분석 (요일별 시간대)"""
+    parts_copy = parts.copy()
+    parts_copy["applied_at"] = pd.to_datetime(parts_copy["applied_at"], errors="coerce")
+    parts_copy["hour"] = parts_copy["applied_at"].dt.hour
+    parts_copy["weekday"] = parts_copy["applied_at"].dt.weekday  # 0=월요일
+
+    # 시간대별 참여 수 집계
+    pivot = parts_copy.pivot_table(
+        index="weekday", columns="hour", values="user_id", aggfunc="count"
+    ).fillna(0)
+
+    # 히트맵 그리기
+    fig, ax = plt.subplots(figsize=(16, 8))
+
+    im = ax.imshow(
+        pivot.values, aspect="auto", cmap="RdYlBu_r", interpolation="nearest"
+    )
+
+    # 컬러바 설정
+    cbar = plt.colorbar(im, ax=ax, shrink=0.8)
+    cbar.set_label("참여 수", fontsize=12, color="#2C3E50")
+    cbar.ax.tick_params(labelsize=10, colors="#2C3E50")
+
+    # 요일 라벨 (한국어)
+    weekday_labels = [
+        "월요일",
+        "화요일",
+        "수요일",
+        "목요일",
+        "금요일",
+        "토요일",
+        "일요일",
+    ]
+    ax.set_yticks(range(7))
+    ax.set_yticklabels(weekday_labels, fontsize=11, color="#2C3E50")
+
+    # 시간 라벨
+    hour_labels = [f"{col:02d}시" for col in pivot.columns]
+    ax.set_xticks(range(len(pivot.columns)))
+    ax.set_xticklabels(
+        hour_labels, fontsize=10, color="#2C3E50", rotation=30, ha="right"
+    )
+
+    # 각 셀에 값 표시 (값이 0이 아닌 경우만)
+    for i in range(pivot.shape[0]):
+        for j in range(pivot.shape[1]):
+            if j < len(pivot.columns):
+                value = int(pivot.iloc[i, j])
+                if value > 0:
+                    text_color = (
+                        "white"
+                        if pivot.iloc[i, j] > pivot.values.max() * 0.5
+                        else "#2C3E50"
+                    )
+                    ax.text(
+                        j,
+                        i,
+                        str(value),
+                        ha="center",
+                        va="center",
+                        fontsize=9,
+                        fontweight="bold",
+                        color=text_color,
+                    )
+
+    plt.title(
+        "참여 시간 활성도 분석 (요일별 시간대)",
+        fontsize=16,
+        fontweight="bold",
+        color="#2C3E50",
+        pad=20,
+    )
+    plt.xlabel("시간 (24시간)", fontsize=12, color="#2C3E50")
+    plt.ylabel("요일", fontsize=12, color="#2C3E50")
+
+    # 배경 설정
+    ax.set_facecolor("white")
+    fig.patch.set_facecolor("white")
+
+    savefig(os.path.join(OUT_DIR, "22_time_activity_heatmap.png"))
+
+
 # ========== PPT 생성 ==========
 def make_ppt(slides: list[dict[str, Any]]) -> None:
     if Presentation is None or Inches is None or Pt is None:
@@ -917,6 +1393,17 @@ def main() -> None:
         posts, favs, users, persona="P3_Fashion_Beauty_Hongdae"
     )
 
+    # 추가 분석 차트 (팀원 요청)
+    print("📊 추가 분석 차트 생성 중...")
+    chart_household_category_preference(users, favs, posts)  # 16번
+    chart_price_participation_analysis(posts, parts)  # 17번
+    chart_gender_category_preference(users, favs, posts)  # 18번
+    chart_age_category_preference(users, favs, posts)  # 19번
+    chart_target_count_success_rate(posts, parts)  # 20번
+    chart_category_popularity_pie(posts)  # 21번
+    chart_time_activity_heatmap(parts)  # 22번
+    print("✅ 추가 분석 차트 생성 완료")
+
     # PPT (선택)
     if MAKE_PPT:
         slides = [
@@ -974,6 +1461,34 @@ def main() -> None:
             dict(
                 title="상태별 joined_count",
                 img=os.path.join(OUT_DIR, "15_joined_by_status_box.png"),
+            ),
+            dict(
+                title="가구원 수별 선호 카테고리",
+                img=os.path.join(OUT_DIR, "16_household_category_preference.png"),
+            ),
+            dict(
+                title="금액별 참여도 분석",
+                img=os.path.join(OUT_DIR, "17_price_participation_analysis.png"),
+            ),
+            dict(
+                title="남녀 선호 카테고리",
+                img=os.path.join(OUT_DIR, "18_gender_category_preference.png"),
+            ),
+            dict(
+                title="연령대별 관심 카테고리",
+                img=os.path.join(OUT_DIR, "19_age_category_preference.png"),
+            ),
+            dict(
+                title="목표 인원별 성공률",
+                img=os.path.join(OUT_DIR, "20_target_count_success_rate.png"),
+            ),
+            dict(
+                title="카테고리 인기도 분석",
+                img=os.path.join(OUT_DIR, "21_category_popularity_pie.png"),
+            ),
+            dict(
+                title="참여 시간 활성도",
+                img=os.path.join(OUT_DIR, "22_time_activity_heatmap.png"),
             ),
             dict(
                 title="결론",
