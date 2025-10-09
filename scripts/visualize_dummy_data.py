@@ -1314,6 +1314,180 @@ def chart_time_activity_heatmap(parts: pd.DataFrame) -> None:
     savefig(os.path.join(OUT_DIR, "22_time_activity_heatmap.png"))
 
 
+def chart_persona_category_analysis(  # noqa: PLR0915
+    users: pd.DataFrame,
+    posts: pd.DataFrame,
+    favs: pd.DataFrame,
+    parts: pd.DataFrame,
+    persona_nicks: list[str],
+) -> None:
+    """페르소나별 찜/참여 카테고리 분석 (통합)"""
+    # 게시물 카테고리 정보
+    post_categories = posts.set_index("id")["category"]
+
+    # 각 페르소나별 데이터 수집
+    persona_data = []
+
+    for nick in persona_nicks:
+        person = users[users["nickname"].str.contains(nick)]
+        if person.empty:
+            continue
+
+        uid = person.iloc[0]["id"]
+
+        # 찜한 게시물의 카테고리
+        fav_posts = favs[favs["user_id"] == uid]["mogu_post_id"]
+        fav_categories = post_categories[post_categories.index.isin(fav_posts)]
+
+        # 참여한 게시물의 카테고리
+        part_posts = parts[parts["user_id"] == uid]["mogu_post_id"]
+        part_categories = post_categories[post_categories.index.isin(part_posts)]
+
+        # 찜 + 참여 합치기
+        all_categories = pd.concat([fav_categories, part_categories])
+
+        # 카테고리별 개수 집계
+        category_counts = all_categories.value_counts()
+
+        persona_data.append(
+            {
+                "persona": nick.replace("_", " "),
+                "categories": category_counts.to_dict(),
+            }
+        )
+
+    # 모든 카테고리 목록
+    all_cats = set()
+    for p in persona_data:
+        all_cats.update(p["categories"].keys())
+    all_cats = sorted(all_cats)
+
+    # 데이터프레임 생성
+    data_matrix = []
+    persona_labels = []
+    for p in persona_data:
+        persona_labels.append(p["persona"])
+        row = [p["categories"].get(cat, 0) for cat in all_cats]
+        data_matrix.append(row)
+
+    df = pd.DataFrame(data_matrix, index=persona_labels, columns=all_cats)
+
+    # 정규화 (백분율로 변환)
+    df_pct = df.div(df.sum(axis=1), axis=0) * 100
+
+    # 부드러운 색상 설정
+    soft_colors = ["#FF6B6B", "#4ECDC4", "#45B7D1", "#96CEB4"]
+
+    # 1. 스택 바 차트 (백분율)
+    fig, ax = plt.subplots(figsize=(14, 8))
+    df_pct.plot(
+        kind="bar",
+        stacked=True,
+        ax=ax,
+        color=soft_colors,
+        alpha=0.8,
+        edgecolor="#2C3E50",
+        linewidth=0.5,
+    )
+
+    plt.title(
+        "페르소나별 찜/참여 카테고리 분포 (%)",
+        fontsize=16,
+        fontweight="bold",
+        color="#2C3E50",
+        pad=20,
+    )
+    plt.xlabel("페르소나", fontsize=12, color="#2C3E50")
+    plt.ylabel("비율 (%)", fontsize=12, color="#2C3E50")
+    plt.xticks(rotation=30, ha="right")
+    plt.legend(title="카테고리", bbox_to_anchor=(1.05, 1), loc="upper left", fontsize=9)
+    plt.grid(True, alpha=0.3, axis="y")
+
+    # 배경 설정
+    ax.set_facecolor("white")
+    fig.patch.set_facecolor("white")
+
+    savefig(os.path.join(OUT_DIR, "23_persona_category_stacked.png"))
+
+    # 2. 그룹 바 차트 (절대값)
+    fig, ax = plt.subplots(figsize=(14, 8))
+    df.plot(
+        kind="bar",
+        ax=ax,
+        color=soft_colors,
+        alpha=0.8,
+        edgecolor="#2C3E50",
+        linewidth=0.5,
+    )
+
+    plt.title(
+        "페르소나별 찜/참여 카테고리 개수",
+        fontsize=16,
+        fontweight="bold",
+        color="#2C3E50",
+        pad=20,
+    )
+    plt.xlabel("페르소나", fontsize=12, color="#2C3E50")
+    plt.ylabel("개수", fontsize=12, color="#2C3E50")
+    plt.xticks(rotation=30, ha="right")
+    plt.legend(title="카테고리", bbox_to_anchor=(1.05, 1), loc="upper left", fontsize=9)
+    plt.grid(True, alpha=0.3, axis="y")
+
+    # 배경 설정
+    ax.set_facecolor("white")
+    fig.patch.set_facecolor("white")
+
+    savefig(os.path.join(OUT_DIR, "24_persona_category_grouped.png"))
+
+    # 3. 히트맵 (백분율)
+    fig, ax = plt.subplots(figsize=(12, 8))
+
+    im = ax.imshow(df_pct.values, aspect="auto", cmap="YlGnBu", interpolation="nearest")
+
+    # 컬러바 설정
+    cbar = plt.colorbar(im, ax=ax, shrink=0.8)
+    cbar.set_label("비율 (%)", fontsize=12, color="#2C3E50")
+    cbar.ax.tick_params(labelsize=10, colors="#2C3E50")
+
+    # 축 라벨 설정
+    ax.set_yticks(range(len(persona_labels)))
+    ax.set_yticklabels(persona_labels, fontsize=11, color="#2C3E50")
+
+    ax.set_xticks(range(len(all_cats)))
+    ax.set_xticklabels(all_cats, fontsize=10, color="#2C3E50", rotation=45, ha="right")
+
+    # 각 셀에 값 표시
+    for i in range(len(persona_labels)):
+        for j in range(len(all_cats)):
+            value = df_pct.iloc[i, j]
+            if value > 0:
+                text_color = "white" if value > 30 else "#2C3E50"  # noqa: PLR2004
+                ax.text(
+                    j,
+                    i,
+                    f"{value:.1f}",
+                    ha="center",
+                    va="center",
+                    fontsize=9,
+                    fontweight="bold",
+                    color=text_color,
+                )
+
+    plt.title(
+        "페르소나별 카테고리 선호도 히트맵 (%)",
+        fontsize=16,
+        fontweight="bold",
+        color="#2C3E50",
+        pad=20,
+    )
+
+    # 배경 설정
+    ax.set_facecolor("white")
+    fig.patch.set_facecolor("white")
+
+    savefig(os.path.join(OUT_DIR, "25_persona_category_heatmap.png"))
+
+
 # ========== PPT 생성 ==========
 def make_ppt(slides: list[dict[str, Any]]) -> None:
     if Presentation is None or Inches is None or Pt is None:
@@ -1402,6 +1576,7 @@ def main() -> None:
     chart_target_count_success_rate(posts, parts)  # 20번
     chart_category_popularity_pie(posts)  # 21번
     chart_time_activity_heatmap(parts)  # 22번
+    chart_persona_category_analysis(users, posts, favs, parts, persona_nicks)  # 23-25번
     print("✅ 추가 분석 차트 생성 완료")
 
     # PPT (선택)
@@ -1489,6 +1664,18 @@ def main() -> None:
             dict(
                 title="참여 시간 활성도",
                 img=os.path.join(OUT_DIR, "22_time_activity_heatmap.png"),
+            ),
+            dict(
+                title="페르소나별 카테고리 분포 (%)",
+                img=os.path.join(OUT_DIR, "23_persona_category_stacked.png"),
+            ),
+            dict(
+                title="페르소나별 카테고리 개수",
+                img=os.path.join(OUT_DIR, "24_persona_category_grouped.png"),
+            ),
+            dict(
+                title="페르소나별 카테고리 히트맵",
+                img=os.path.join(OUT_DIR, "25_persona_category_heatmap.png"),
             ),
             dict(
                 title="결론",
