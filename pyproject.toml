@@ -26,6 +26,7 @@ matplotlib = "^3.10.6"
 numpy = "^2.3.3"
 python-pptx = "^1.0.2"
 folium = "^0.20.0"
+psycopg2-binary = "^2.9.10"
 
 [tool.poetry.group.dev.dependencies]
 coverage = "^7.10.7"
@@ -60,7 +61,7 @@ source = ["app"]
 [tool.mypy]
 python_version = "3.13"
 strict = true
-exclude = ["scripts/visualize_dummy_data.py"]
+exclude = ["scripts/visualize_dummy_data.py", "scripts/analyze_item_diversity.py"]
 
 [tool.ruff]
 target-version = "py313"

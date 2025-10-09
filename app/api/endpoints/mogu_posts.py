@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends
 from fastapi import status as http_status
 from geoalchemy2.shape import from_shape
 from shapely.geometry import Point
-from sqlalchemy import desc, func, select
+from sqlalchemy import case, desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -43,6 +43,7 @@ from app.schemas.responses import (
     MoguPostWithParticipationResponse,
 )
 from app.schemas.types import ParticipationStatusLiteral, PostStatusLiteral
+from app.utils.ai_recommendation import rank_by_ai
 
 logger = logging.getLogger(__name__)
 
@@ -189,20 +190,21 @@ async def get_mogu_posts(
 ) -> MoguPostListPaginatedResponse:
     """모구 게시물 목록을 조회합니다."""
 
-    # 기본 쿼리 - 썸네일 이미지만 로드
-    query = select(MoguPost).options(
-        selectinload(MoguPost.images),
-    )
+    if params.sort in ("recent", "distance"):
+        # 기본 쿼리 - 썸네일 이미지만 로드
+        query = select(MoguPost).options(
+            selectinload(MoguPost.images),
+        )
 
-    # 필터 적용
-    if params.category:
-        query = query.where(MoguPost.category == params.category)
-    if params.mogu_market:
-        query = query.where(MoguPost.mogu_market == params.mogu_market)
-    if params.status:
-        query = query.where(MoguPost.status == params.status)
+        # 필터 적용
+        if params.category:
+            query = query.where(MoguPost.category == params.category)
+        if params.mogu_market:
+            query = query.where(MoguPost.mogu_market == params.mogu_market)
+        if params.status:
+            query = query.where(MoguPost.status == params.status)
 
-        # 거리 기반 필터링 (PostGIS 사용) - 이제 필수 파라미터
+        # 거리 기반 필터링 (PostGIS 사용) & 미래 시간 체크
         query = query.where(
             func.ST_DWithin(
                 MoguPost.mogu_spot,
@@ -211,37 +213,64 @@ async def get_mogu_posts(
                 ),
                 params.radius * 1000,  # km를 m로 변환
             )
-        )
+        ).where(MoguPost.mogu_datetime > func.now())
 
-    # 정렬 적용
-    if params.sort == "recent":
-        query = query.order_by(desc(MoguPost.created_at))
-    elif params.sort == "distance":
-        # 거리순 정렬 (PostGIS 사용)
-        query = query.order_by(
-            func.ST_Distance(
-                MoguPost.mogu_spot,
-                func.ST_SetSRID(
-                    func.ST_MakePoint(params.longitude, params.latitude), 4326
-                ),
+        # 정렬 적용
+        if params.sort == "recent":
+            query = query.order_by(desc(MoguPost.created_at))
+        elif params.sort == "distance":
+            # 거리순 정렬 (PostGIS 사용)
+            query = query.order_by(
+                func.ST_Distance(
+                    MoguPost.mogu_spot,
+                    func.ST_SetSRID(
+                        func.ST_MakePoint(params.longitude, params.latitude), 4326
+                    ),
+                )
             )
-        )
+
+        # 총 개수 조회
+        count_query = select(func.count()).select_from(query.subquery())
+        total_result = await session.execute(count_query)
+        total = total_result.scalar() or 0
+
+        # 페이지네이션 적용
+        offset = (params.page - 1) * params.size
+        query = query.offset(offset).limit(params.size)
+
+        # 데이터 조회
+        result = await session.execute(query)
+        mogu_posts = result.scalars().all()
+
     else:  # ai_recommended (기본값)
-        # TODO: AI 추천 로직 구현
-        query = query.order_by(desc(MoguPost.created_at))
+        # AI 추천 로직
+        page_ids, total = await rank_by_ai(session, params, current_user)
 
-    # 총 개수 조회
-    count_query = select(func.count()).select_from(query.subquery())
-    total_result = await session.execute(count_query)
-    total = total_result.scalar() or 0
+        if not page_ids:
+            return MoguPostListPaginatedResponse(
+                items=[],
+                pagination={
+                    "page": params.page,
+                    "limit": params.size,
+                    "total": 0,
+                    "total_pages": 0,
+                },
+            )
 
-    # 페이지네이션 적용
-    offset = (params.page - 1) * params.size
-    query = query.offset(offset).limit(params.size)
-
-    # 데이터 조회
-    result = await session.execute(query)
-    mogu_posts = result.scalars().all()
+        # 페이지 아이디들 순서를 유지하여 로드
+        # CASE WHEN으로 정렬 유지
+        case_order = case(
+            {pid: idx for idx, pid in enumerate(page_ids)},
+            value=MoguPost.id,
+        )
+        query = (
+            select(MoguPost)
+            .options(selectinload(MoguPost.images))
+            .where(MoguPost.id.in_(page_ids))
+            .order_by(case_order)
+        )
+        result = await session.execute(query)
+        mogu_posts = result.scalars().all()
 
     # 응답 데이터 구성
     posts = []
