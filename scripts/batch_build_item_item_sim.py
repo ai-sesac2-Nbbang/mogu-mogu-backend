@@ -31,6 +31,7 @@ settings = get_settings()
 K_NEIGHBORS = int(os.getenv("SIM_TOPK", "100"))  # 아이템당 이웃 개수
 MIN_COMMON = int(os.getenv("SIM_MIN_COMMON", "2"))  # 최소 공통 사용자 수
 MIN_SIM = float(os.getenv("SIM_MIN_SIM", "0.05"))  # 최소 유사도
+LAMBDA = float(os.getenv("SIM_LAMBDA", "5.0"))  # 베이지안 스무딩 계수
 LIMIT_USERS = int(os.getenv("SIM_LIMIT_USERS", "0"))  # 0이면 전체, 디버깅용 부분 샘플
 
 
@@ -83,10 +84,11 @@ def build_item_cosine(
     interactions: list[tuple[str, str, float]],
 ) -> dict[str, list[tuple[str, float, int]]]:
     """
-    사용자 단위로 아이템쌍 내적 누적, 아이템별 제곱합 누적.
+    Item-Item cosine 유사도 + 베이지안 보정 적용
+    (공통 사용자 수가 적은 쌍의 유사도를 자동 패널티)
 
     Returns:
-        topk: dict[src] -> list[(neigh, sim, cnt)]
+        topk: dict[src] -> list[(neigh, sim_bayes, cnt)]
     """
     # user -> [(item, weight), ...]
     by_user: dict[str, list[tuple[str, float]]] = defaultdict(list)
@@ -112,7 +114,7 @@ def build_item_cosine(
                 dot[key] += wi * wj
                 cnt[key] += 1
 
-    # cosine 계산 + Top-K
+    # cosine 계산 + 베이지안 보정 + Top-K
     neighs: dict[str, list[tuple[str, float, int]]] = defaultdict(list)
     for (i, j), d in dot.items():
         common_users = cnt[(i, j)]
@@ -122,11 +124,18 @@ def build_item_cosine(
         nj = math.sqrt(norm[j]) if norm[j] > 0 else 0.0
         if ni == 0.0 or nj == 0.0:
             continue
+
+        # 기본 코사인 유사도
         sim = d / (ni * nj)
-        if sim < MIN_SIM:
+
+        # 베이지안 보정 (신뢰도 반영)
+        # 공통 사용자 수가 적을수록 유사도에 패널티
+        sim_bayes = (common_users / (common_users + LAMBDA)) * sim
+
+        if sim_bayes < MIN_SIM:
             continue
-        neighs[i].append((j, sim, common_users))
-        neighs[j].append((i, sim, common_users))
+        neighs[i].append((j, sim_bayes, common_users))
+        neighs[j].append((i, sim_bayes, common_users))
 
     # 각 아이템별 Top-K 자르기
     for i in list(neighs.keys()):
@@ -200,10 +209,10 @@ def main() -> None:
         print("❌ 상호작용 데이터가 없습니다. 찜하기/참여 데이터를 먼저 생성하세요.")
         return
 
-    print("🔧 아이템-아이템 코사인 유사도 계산 중...")
+    print("🔧 아이템-아이템 코사인 유사도 계산 중 (베이지안 보정 적용)...")
     neighs = build_item_cosine(inter)
     total_pairs = sum(len(v) for v in neighs.values())
-    print(f"   -> {len(neighs):,} 개 아이템, {total_pairs:,} 개 유사도 쌍")
+    print(f"   -> {len(neighs):,} 개 아이템, {total_pairs:,} 개 유사도 쌍 (λ={LAMBDA})")
 
     if not neighs:
         print(
@@ -222,6 +231,7 @@ def main() -> None:
     print(f"   - Top-K: {K_NEIGHBORS}")
     print(f"   - 최소 공통 사용자: {MIN_COMMON}")
     print(f"   - 최소 유사도: {MIN_SIM}")
+    print(f"   - 베이지안 λ: {LAMBDA} (공통 사용자 수 기반 신뢰도 보정)")
 
 
 if __name__ == "__main__":
