@@ -60,6 +60,7 @@ source = ["app"]
 [tool.mypy]
 python_version = "3.13"
 strict = true
+exclude = ["scripts/visualize_dummy_data.py"]
 
 [tool.ruff]
 target-version = "py313"
