@@ -366,6 +366,8 @@ class MoguPostListItemResponse(BaseResponse):
     created_at: datetime
     thumbnail_image: str | None = None
     favorite_count: int  # 찜하기 개수
+    # AI 추천 디버그 정보 (개발용)
+    ai_score_debug: dict[str, float] | None = None
 
 
 class MoguPostListItemWithReviewResponse(MoguPostListItemResponse):

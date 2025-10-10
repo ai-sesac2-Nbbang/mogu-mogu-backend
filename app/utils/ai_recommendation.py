@@ -22,7 +22,7 @@ CANDIDATE_LIMIT = 300
 
 # 연속 가중치 방식: 히스토리 강도 기반 (History Strength-based Weighting)
 W1_MIN = 0.15  # 최소 V1 가중치 (콜드 유저)
-W1_MAX = 0.40  # 최대 V1 가중치 (웜 유저)
+W1_MAX = 0.50  # 최대 V1 가중치 (웜 유저) - V0:V1 = 50:50 균형
 TAU_DAYS = 30.0  # 최신성 감쇠 상수 (일 단위)
 H_REF = 10.0  # 히스토리 강도 정규화 기준치
 COVERAGE_THRESHOLD = 0.3  # CF 커버리지 보정 임계값 (30%)
@@ -271,8 +271,12 @@ def pick_ensemble_weights(
     """히스토리 강도 기반 앙상블 가중치 결정
 
     기본 스케줄:
-        w1 = W1_MIN + (W1_MAX - W1_MIN) × s
+        w1 = 0.15 + 0.35 × s  (s ∈ [0,1])
         w0 = 1 - w1
+
+    결과:
+        - Cold (s=0): w1=0.15 (V0 85% / V1 15%)
+        - Warm (s=1): w1=0.50 (V0 50% / V1 50% 균형)
 
     커버리지 보정 (선택적):
         V1 > 0인 아이템 비율이 낮으면 w1 추가 감소
@@ -470,7 +474,7 @@ async def rank_by_ai(  # noqa: PLR0912, PLR0915
     session: AsyncSession,
     params: MoguPostListQueryParams,
     current_user: User | None,
-) -> tuple[list[str], int]:
+) -> tuple[list[str], int, dict[str, dict[str, float]]]:
     """AI 하이브리드 추천 정렬
 
     V0 (Content-Based) + V1 (Collaborative Filtering) 하이브리드
@@ -499,7 +503,7 @@ async def rank_by_ai(  # noqa: PLR0912, PLR0915
     cand_rows = await fetch_candidates_with_features(session, params)
     if not cand_rows:
         logger.info("No candidates found")
-        return [], 0
+        return [], 0, {}
 
     logger.info(f"Candidates loaded: {len(cand_rows)} posts")
 
@@ -630,4 +634,13 @@ async def rank_by_ai(  # noqa: PLR0912, PLR0915
         score_log += f"{'=' * 80}\n"
         logger.info(score_log)
 
-    return page_ids, total
+    # AI 점수 디버그 정보 생성 (전체 후보군)
+    score_debug = {}
+    for i, row in enumerate(cand_rows):
+        score_debug[str(row["id"])] = {
+            "v0": float(v0[i]),
+            "v1": float(v1[i]),
+            "final": float(final[i]),
+        }
+
+    return page_ids, total, score_debug

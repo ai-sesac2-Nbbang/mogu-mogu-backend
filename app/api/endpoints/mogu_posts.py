@@ -241,10 +241,11 @@ async def get_mogu_posts(
         # 데이터 조회
         result = await session.execute(query)
         mogu_posts = result.scalars().all()
+        score_debug: dict[str, dict[str, float]] = {}  # AI 추천이 아닌 경우 빈 딕셔너리
 
     else:  # ai_recommended (기본값)
         # AI 추천 로직
-        page_ids, total = await rank_by_ai(session, params, current_user)
+        page_ids, total, score_debug = await rank_by_ai(session, params, current_user)
 
         if not page_ids:
             return MoguPostListPaginatedResponse(
@@ -293,6 +294,7 @@ async def get_mogu_posts(
                 created_at=post.created_at,
                 thumbnail_image=basic_data["thumbnail_image"],
                 favorite_count=basic_data["favorite_count"],
+                ai_score_debug=score_debug.get(str(post.id)),  # AI 점수 디버그 정보
             )
         )
 
