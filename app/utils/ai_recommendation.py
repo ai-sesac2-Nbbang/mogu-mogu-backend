@@ -4,6 +4,8 @@ V0 (Content-Based) + V1 (Collaborative Filtering) 하이브리드 추천 시스�
 """
 
 import logging
+import math
+from datetime import UTC, datetime
 from typing import Any
 
 import numpy as np
@@ -17,10 +19,13 @@ logger = logging.getLogger(__name__)
 
 # ===== 하이퍼파라미터 =====
 CANDIDATE_LIMIT = 300
-W0_COLD = 0.85  # 콜드 유저: V0 중심
-W1_COLD = 0.15
-W0_WARM = 0.65  # 히스토리 보유: 균형
-W1_WARM = 0.35
+
+# 연속 가중치 방식: 히스토리 강도 기반 (History Strength-based Weighting)
+W1_MIN = 0.15  # 최소 V1 가중치 (콜드 유저)
+W1_MAX = 0.50  # 최대 V1 가중치 (웜 유저) - V0:V1 = 50:50 균형
+TAU_DAYS = 30.0  # 최신성 감쇠 상수 (일 단위)
+H_REF = 10.0  # 히스토리 강도 정규화 기준치
+COVERAGE_THRESHOLD = 0.3  # CF 커버리지 보정 임계값 (30%)
 
 HISTORY_LIMIT = 50  # 사용자 히스토리 상위 n개
 EPSILON = 1e-9  # 0으로 나누기 방지
@@ -186,6 +191,121 @@ async def fetch_user_history_post_ids(session: AsyncSession, user_id: str) -> li
     )
     rows = (await session.execute(q, {"uid": user_id, "lim": HISTORY_LIMIT})).all()
     return [str(r[0]) for r in rows]
+
+
+# ===== 히스토리 강도 계산 =====
+async def compute_history_strength(session: AsyncSession, user_id: str) -> float:
+    """사용자 히스토리 강도를 연속값 s ∈ [0,1]로 계산
+
+    히스토리 강도는 다음 두 가지를 반영:
+    1. 이벤트 가중치: fulfilled/accepted(2.0) > favorite(1.0) > applied(0.5)
+    2. 최신성 감쇠: exp(-Δt / τ), τ=30일
+
+    계산식:
+        raw = Σ(weight_event × decay_time)
+        s = clip(raw / H_REF, 0, 1)
+
+    직관:
+    - 참여가 많고 최근에 활동할수록 s → 1
+    - 활동이 적거나 오래되면 s → 0
+
+    Args:
+        session: DB 세션
+        user_id: 사용자 ID
+
+    Returns:
+        히스토리 강도 s ∈ [0,1]
+    """
+    q = text(
+        """
+    with hist as (
+      select coalesce(decided_at, applied_at) as t, 2.0 as w
+      from participation
+      where user_id = :uid and status in ('accepted', 'fulfilled')
+      union all
+      select created_at as t, 1.0 as w
+      from mogu_favorite
+      where user_id = :uid
+      union all
+      select applied_at as t, 0.5 as w
+      from participation
+      where user_id = :uid and status = 'applied'
+    )
+    select t, w from hist order by t desc limit 200
+    """
+    )
+    rows = (await session.execute(q, {"uid": user_id})).all()
+
+    if not rows:
+        return 0.0
+
+    now = datetime.now(UTC)  # noqa: DTZ005
+    raw = 0.0
+
+    for t, w in rows:
+        if t is None:
+            continue
+
+        # 시간 차이 (일 단위)
+        dt_days = max(0.0, (now - t).total_seconds() / 86400.0)
+
+        # 지수 감쇠: exp(-Δt / τ)
+        decay = math.exp(-dt_days / TAU_DAYS)
+
+        # 가중 누적
+        raw += float(w) * decay
+
+    # 정규화 및 클리핑
+    s = min(max(raw / H_REF, 0.0), 1.0)
+
+    logger.info(
+        f"History strength computed: user_id={user_id}, raw={raw:.2f}, strength={s:.3f}"
+    )
+
+    return s
+
+
+def pick_ensemble_weights(
+    v1_array: np.ndarray | None, history_strength: float
+) -> tuple[float, float]:
+    """히스토리 강도 기반 앙상블 가중치 결정
+
+    기본 스케줄:
+        w1 = 0.15 + 0.35 × s  (s ∈ [0,1])
+        w0 = 1 - w1
+
+    결과:
+        - Cold (s=0): w1=0.15 (V0 85% / V1 15%)
+        - Warm (s=1): w1=0.50 (V0 50% / V1 50% 균형)
+
+    커버리지 보정 (선택적):
+        V1 > 0인 아이템 비율이 낮으면 w1 추가 감소
+        → CF 신호가 부족한 경우 과도한 V1 의존 방지
+
+    Args:
+        v1_array: V1 점수 배열 (커버리지 계산용)
+        history_strength: 히스토리 강도 s ∈ [0,1]
+
+    Returns:
+        (w0, w1) 가중치 튜플
+    """
+    # 기본 w1 스케줄
+    w1 = W1_MIN + (W1_MAX - W1_MIN) * history_strength
+    w0 = 1.0 - w1
+
+    # 커버리지 보정: V1>0 비율이 낮으면 w1 줄이기
+    if v1_array is not None and len(v1_array) > 0:
+        coverage = (v1_array > 0).sum() / len(v1_array)
+        if coverage < COVERAGE_THRESHOLD:
+            factor = min(1.0, coverage / COVERAGE_THRESHOLD)
+            w1 *= factor
+            w0 = 1.0 - w1
+            logger.info(
+                f"Coverage adjustment applied: coverage={coverage:.2%}, "
+                f"adjusted_w1={w1:.3f}"
+            )
+
+    return w0, w1
 
 
 # ===== V1: CF 점수 계산 =====
@@ -354,7 +474,7 @@ async def rank_by_ai(  # noqa: PLR0912, PLR0915
     session: AsyncSession,
     params: MoguPostListQueryParams,
     current_user: User | None,
-) -> tuple[list[str], int]:
+) -> tuple[list[str], int, dict[str, dict[str, float]]]:
     """AI 하이브리드 추천 정렬
 
     V0 (Content-Based) + V1 (Collaborative Filtering) 하이브리드
@@ -383,7 +503,7 @@ async def rank_by_ai(  # noqa: PLR0912, PLR0915
     cand_rows = await fetch_candidates_with_features(session, params)
     if not cand_rows:
         logger.info("No candidates found")
-        return [], 0
+        return [], 0, {}
 
     logger.info(f"Candidates loaded: {len(cand_rows)} posts")
 
@@ -421,11 +541,10 @@ async def rank_by_ai(  # noqa: PLR0912, PLR0915
 
     # 4) V1: 아이템 CF
     v1 = np.zeros_like(v0)
-    has_hist = False
+    history_strength = 0.0
     if current_user:
         history_ids = await fetch_user_history_post_ids(session, str(current_user.id))
         if history_ids:
-            has_hist = True
             logger.info(
                 f"User history: {len(history_ids)} items (favorites + participations)"
             )
@@ -441,16 +560,20 @@ async def rank_by_ai(  # noqa: PLR0912, PLR0915
                     f"V1 (CF) final scores: {len(v1_nonzero)}/{len(v1)} items, "
                     f"avg={np.mean(v1_nonzero):.3f}, max={np.max(v1):.3f}"
                 )
+
+            # 히스토리 강도 계산
+            history_strength = await compute_history_strength(
+                session, str(current_user.id)
+            )
         else:
             logger.info("V1 (CF) disabled: user has no history")
 
-    # 5) 앙상블
-    if has_hist:
-        w0, w1 = W0_WARM, W1_WARM
-        logger.info(f"Hybrid ensemble (warm user): w0={w0}, w1={w1}")
-    else:
-        w0, w1 = W0_COLD, W1_COLD
-        logger.info(f"Hybrid ensemble (cold user): w0={w0}, w1={w1}")
+    # 5) 앙상블 (연속 가중치 방식)
+    w0, w1 = pick_ensemble_weights(v1, history_strength)
+    logger.info(
+        f"Hybrid ensemble (continuous weighting): "
+        f"history_strength={history_strength:.3f}, w0={w0:.3f}, w1={w1:.3f}"
+    )
     final = w0 * v0 + w1 * v1
 
     # 최종 점수 통계 로깅
@@ -511,4 +634,13 @@ async def rank_by_ai(  # noqa: PLR0912, PLR0915
         score_log += f"{'=' * 80}\n"
         logger.info(score_log)
 
-    return page_ids, total
+    # AI 점수 디버그 정보 생성 (전체 후보군)
+    score_debug = {}
+    for i, row in enumerate(cand_rows):
+        score_debug[str(row["id"])] = {
+            "v0": float(v0[i]),
+            "v1": float(v1[i]),
+            "final": float(final[i]),
+        }
+
+    return page_ids, total, score_debug
